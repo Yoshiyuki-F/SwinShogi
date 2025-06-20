@@ -10,8 +10,8 @@ import jax.numpy as jnp
 from src.model.swin_shogi import create_swin_shogi_model
 from src.utils.performance import benchmark_inference, profile_mcts
 from src.rl.mcts import MCTS
-from src.core.reinforcement_learning import ActorCritic
-from src.shogi.shogi_pieces import ShogiGame
+from src.model.actor_critic import ActorCritic
+from src.shogi.shogi_game import ShogiGame
 
 class TestPerformanceEvaluation(unittest.TestCase):
     """パフォーマンス評価のテストケース"""

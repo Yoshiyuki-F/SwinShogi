@@ -1,7 +1,12 @@
+"""
+将棋のゲームロジックを実装するモジュール
+"""
+from src.shogi.shogi_pieces import (
+    ShogiPiece, Player
+)
+from typing import List, Tuple, Dict, Any, Optional
+import re
 import hashlib
-from typing import List, Tuple
-
-from src.shogi.shogi_pieces import ShogiPiece, Player, PieceType
 from src.shogi.board_visualizer import BoardVisualizer
     
 class ShogiGame:
@@ -19,34 +24,34 @@ class ShogiGame:
     def setup_initial_board(self):
         """初期配置の設定"""
         # 先手の駒配置（下側）
-        self.board[8][0] = ShogiPiece(PieceType.LANCE, Player.SENTE)
-        self.board[8][1] = ShogiPiece(PieceType.KNIGHT, Player.SENTE)
-        self.board[8][2] = ShogiPiece(PieceType.SILVER, Player.SENTE)
-        self.board[8][3] = ShogiPiece(PieceType.GOLD, Player.SENTE)
-        self.board[8][4] = ShogiPiece(PieceType.KING, Player.SENTE)
-        self.board[8][5] = ShogiPiece(PieceType.GOLD, Player.SENTE)
-        self.board[8][6] = ShogiPiece(PieceType.SILVER, Player.SENTE)
-        self.board[8][7] = ShogiPiece(PieceType.KNIGHT, Player.SENTE)
-        self.board[8][8] = ShogiPiece(PieceType.LANCE, Player.SENTE)
-        self.board[7][1] = ShogiPiece(PieceType.BISHOP, Player.SENTE)
-        self.board[7][7] = ShogiPiece(PieceType.ROOK, Player.SENTE)
+        self.board[8][0] = ShogiPiece("lance", Player.SENTE)
+        self.board[8][1] = ShogiPiece("knight", Player.SENTE)
+        self.board[8][2] = ShogiPiece("silver", Player.SENTE)
+        self.board[8][3] = ShogiPiece("gold", Player.SENTE)
+        self.board[8][4] = ShogiPiece("king", Player.SENTE)
+        self.board[8][5] = ShogiPiece("gold", Player.SENTE)
+        self.board[8][6] = ShogiPiece("silver", Player.SENTE)
+        self.board[8][7] = ShogiPiece("knight", Player.SENTE)
+        self.board[8][8] = ShogiPiece("lance", Player.SENTE)
+        self.board[7][1] = ShogiPiece("bishop", Player.SENTE)
+        self.board[7][7] = ShogiPiece("rook", Player.SENTE)
         for col in range(9):
-            self.board[6][col] = ShogiPiece(PieceType.PAWN, Player.SENTE)
+            self.board[6][col] = ShogiPiece("pawn", Player.SENTE)
             
         # 後手の駒配置（上側）
-        self.board[0][0] = ShogiPiece(PieceType.LANCE, Player.GOTE)
-        self.board[0][1] = ShogiPiece(PieceType.KNIGHT, Player.GOTE)
-        self.board[0][2] = ShogiPiece(PieceType.SILVER, Player.GOTE)
-        self.board[0][3] = ShogiPiece(PieceType.GOLD, Player.GOTE)
-        self.board[0][4] = ShogiPiece(PieceType.KING, Player.GOTE)
-        self.board[0][5] = ShogiPiece(PieceType.GOLD, Player.GOTE)
-        self.board[0][6] = ShogiPiece(PieceType.SILVER, Player.GOTE)
-        self.board[0][7] = ShogiPiece(PieceType.KNIGHT, Player.GOTE)
-        self.board[0][8] = ShogiPiece(PieceType.LANCE, Player.GOTE)
-        self.board[1][1] = ShogiPiece(PieceType.ROOK, Player.GOTE)
-        self.board[1][7] = ShogiPiece(PieceType.BISHOP, Player.GOTE)
+        self.board[0][0] = ShogiPiece("lance", Player.GOTE)
+        self.board[0][1] = ShogiPiece("knight", Player.GOTE)
+        self.board[0][2] = ShogiPiece("silver", Player.GOTE)
+        self.board[0][3] = ShogiPiece("gold", Player.GOTE)
+        self.board[0][4] = ShogiPiece("king", Player.GOTE)
+        self.board[0][5] = ShogiPiece("gold", Player.GOTE)
+        self.board[0][6] = ShogiPiece("silver", Player.GOTE)
+        self.board[0][7] = ShogiPiece("knight", Player.GOTE)
+        self.board[0][8] = ShogiPiece("lance", Player.GOTE)
+        self.board[1][1] = ShogiPiece("rook", Player.GOTE)
+        self.board[1][7] = ShogiPiece("bishop", Player.GOTE)
         for col in range(9):
-            self.board[2][col] = ShogiPiece(PieceType.PAWN, Player.GOTE)
+            self.board[2][col] = ShogiPiece("pawn", Player.GOTE)
             
         # 局面の履歴に現在の局面を追加
         self.position_history.append(self.get_state_hash())
@@ -71,7 +76,7 @@ class ShogiGame:
         rows = board_str.split('/')
         for row_idx, row in enumerate(rows):
             col_idx = 0
-            for char in row:
+            for char_idx, char in enumerate(row):
                 if char.isdigit():
                     col_idx += int(char)
                 else:
@@ -80,37 +85,38 @@ class ShogiGame:
                     piece_char = char.lower()
                     
                     if piece_char == 'p':
-                        piece_type = PieceType.PAWN
+                        piece_type = "pawn"
                     elif piece_char == 'l':
-                        piece_type = PieceType.LANCE
+                        piece_type = "lance"
                     elif piece_char == 'n':
-                        piece_type = PieceType.KNIGHT
+                        piece_type = "knight"
                     elif piece_char == 's':
-                        piece_type = PieceType.SILVER
+                        piece_type = "silver"
                     elif piece_char == 'g':
-                        piece_type = PieceType.GOLD
+                        piece_type = "gold"
                     elif piece_char == 'b':
-                        piece_type = PieceType.BISHOP
+                        piece_type = "bishop"
                     elif piece_char == 'r':
-                        piece_type = PieceType.ROOK
+                        piece_type = "rook"
                     elif piece_char == 'k':
-                        piece_type = PieceType.KING
+                        piece_type = "king"
                     elif piece_char == '+':
                         # 成り駒の処理
                         promoted = True
-                        next_char = row[col_idx + 1].lower()
+                        next_char = row[char_idx + 1].lower()
                         if next_char == 'p':
-                            piece_type = PieceType.PAWN
+                            piece_type = "pawn"
                         elif next_char == 'l':
-                            piece_type = PieceType.LANCE
+                            piece_type = "lance"
                         elif next_char == 'n':
-                            piece_type = PieceType.KNIGHT
+                            piece_type = "knight"
                         elif next_char == 's':
-                            piece_type = PieceType.SILVER
+                            piece_type = "silver"
                         elif next_char == 'b':
-                            piece_type = PieceType.BISHOP
+                            piece_type = "bishop"
                         elif next_char == 'r':
-                            piece_type = PieceType.ROOK
+                            piece_type = "rook"
+                        col_idx += 1  # +記号の次の文字をスキップ
                         
                     self.board[row_idx][col_idx] = ShogiPiece(piece_type, player, promoted)
                     col_idx += 1
@@ -198,7 +204,7 @@ class ShogiGame:
                                 has_pawn = False
                                 for r in range(9):
                                     p = self.board[r][col]
-                                    if p and p.piece_type == PieceType.PAWN and p.player == self.current_player and not p.promoted:
+                                    if p and p.name == "pawn" and p.player == self.current_player and not p.promoted:
                                         has_pawn = True
                                         break
                                 if has_pawn:
@@ -207,7 +213,7 @@ class ShogiGame:
                             # 打ち歩詰めの判定
                             if piece_name == "pawn":
                                 # 一時的に歩を打ってみる
-                                self.board[row][col] = ShogiPiece(PieceType.PAWN, self.current_player)
+                                self.board[row][col] = ShogiPiece("pawn", self.current_player)
                                 self.captures[self.current_player][piece_name] -= 1
                                 
                                 # 詰みになるかチェック
@@ -295,25 +301,25 @@ class ShogiGame:
             
             # 駒の種類を特定
             if piece_type_char == 'p':
-                piece_type = PieceType.PAWN
+                piece_type = "pawn"
                 piece_name = "pawn"
             elif piece_type_char == 'l':
-                piece_type = PieceType.LANCE
+                piece_type = "lance"
                 piece_name = "lance"
             elif piece_type_char == 'n':
-                piece_type = PieceType.KNIGHT
+                piece_type = "knight"
                 piece_name = "knight"
             elif piece_type_char == 's':
-                piece_type = PieceType.SILVER
+                piece_type = "silver"
                 piece_name = "silver"
             elif piece_type_char == 'g':
-                piece_type = PieceType.GOLD
+                piece_type = "gold"
                 piece_name = "gold"
             elif piece_type_char == 'b':
-                piece_type = PieceType.BISHOP
+                piece_type = "bishop"
                 piece_name = "bishop"
             elif piece_type_char == 'r':
-                piece_type = PieceType.ROOK
+                piece_type = "rook"
                 piece_name = "rook"
             
             # 持ち駒を減らす
@@ -344,7 +350,7 @@ class ShogiGame:
                 captured_name = to_piece.name
                 if to_piece.promoted:
                     # 成り駒は元の駒に戻す
-                    captured_name = to_piece.base_piece_type.name.lower()
+                    captured_name = to_piece.base_piece_type
                 
                 # 持ち駒に追加
                 if captured_name not in self.captures[self.current_player]:
@@ -357,7 +363,7 @@ class ShogiGame:
             
             # 成る場合
             if promotion:
-                self.board[to_row][to_col] = ShogiPiece(piece.get_promoted_piece_type(), piece.player, True)
+                self.board[to_row][to_col] = piece.get_promoted_piece()
         
         # 手の履歴に追加
         self.move_history.append(move_str)
@@ -384,7 +390,7 @@ class ShogiGame:
             for col in range(9):
                 piece = self.board[row][col]
                 if piece:
-                    state.append(f"{row}{col}{piece.piece_type.name}{piece.player.value}{piece.promoted}")
+                    state.append(f"{row}{col}{piece.name}{piece.player.value}{piece.promoted}")
                 else:
                     state.append(f"{row}{col}None")
         
@@ -411,7 +417,7 @@ class ShogiGame:
         for row in range(9):
             for col in range(9):
                 piece = self.board[row][col]
-                if piece and piece.piece_type == PieceType.KING and piece.player == self.current_player:
+                if piece and piece.name == "king" and piece.player == self.current_player:
                     king_pos = (row, col)
                     break
             if king_pos:
@@ -444,22 +450,34 @@ class ShogiGame:
         
         # 合法手が存在する場合は詰みではない
         valid_moves = self.get_valid_moves()
-        if valid_moves:
-            for move in valid_moves:
-                # 一時的に手を実行
-                self.move(move)
-                
-                # 自分の手番に戻す
-                self.current_player = Player.GOTE if self.current_player == Player.SENTE else Player.SENTE
-                
-                # 王手が回避できるかチェック
-                is_still_check = self.is_check()
-                
-                # 元に戻す（手番は元に戻っている）
-                self.undo_last_move()
-                
-                if not is_still_check:
-                    return False  # 王手回避可能
+        if not valid_moves:
+            return True  # 合法手がなければ詰み
+            
+        # 各合法手を試して王手が回避できるかチェック
+        for move in valid_moves:
+            # 一時的に手を実行
+            original_board = [row[:] for row in self.board]
+            original_captures = {
+                Player.SENTE: self.captures[Player.SENTE].copy(),
+                Player.GOTE: self.captures[Player.GOTE].copy()
+            }
+            original_player = self.current_player
+            
+            self.move(move)
+            
+            # 自分の手番に戻す
+            self.current_player = original_player
+            
+            # 王手が回避できるかチェック
+            is_still_check = self.is_check()
+            
+            # 元に戻す
+            self.board = original_board
+            self.captures = original_captures
+            self.current_player = original_player
+            
+            if not is_still_check:
+                return False  # 王手回避可能
         
         return True  # 詰み
     

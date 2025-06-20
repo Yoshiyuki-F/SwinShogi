@@ -1,114 +1,171 @@
 """
 将棋のルールと駒の動きを実装するモジュール
 """
-from typing import List, Tuple
-from enum import Enum, auto
-from dataclasses import dataclass
+from typing import List, Tuple, Dict, Any, Optional
+from enum import Enum
 
 class Player(Enum):
     """プレイヤー（先手/後手）"""
     SENTE = 0  # 先手
     GOTE = 1   # 後手
 
-class PieceType(Enum):
-    """駒の種類"""
-    # 基本駒
-    PAWN = auto()      # 歩兵
-    LANCE = auto()     # 香車
-    KNIGHT = auto()    # 桂馬
-    SILVER = auto()    # 銀将
-    GOLD = auto()      # 金将
-    BISHOP = auto()    # 角行
-    ROOK = auto()      # 飛車
-    KING = auto()      # 玉将
-    
-    # 成り駒
-    PROMOTED_PAWN = auto()      # と金
-    PROMOTED_LANCE = auto()     # 成香
-    PROMOTED_KNIGHT = auto()    # 成桂
-    PROMOTED_SILVER = auto()    # 成銀
-    PROMOTED_BISHOP = auto()    # 馬
-    PROMOTED_ROOK = auto()      # 龍
-
-@dataclass
 class ShogiPiece:
-    """将棋の駒を表すクラス"""
-    piece_type: PieceType
-    player: Player
-    promoted: bool = False
+    """将棋の駒クラス"""
+    Gold_directions = [(-1, -1), (0, -1), (1, -1), (-1, 0), (1, 0), (0, 1)]
+    Bishop_directions = [(-1, -1, "line"), (1, -1, "line"), (-1, 1, "line"), (1, 1, "line")]
+    Rook_directions = [(0, -1, "line"), (-1, 0, "line"), (1, 0, "line"), (0, 1, "line")]
+    # 駒の情報を一元管理する辞書
+    PIECE_INFO = {
+        # 基本駒
+        "pawn": {
+            "symbol": "歩",
+            "can_promote": True,
+            "promoted_type": "promoted_pawn",
+            "directions": [(0, -1)],  # 前に1マス
+        },
+        "lance": {
+            "symbol": "香",
+            "can_promote": True,
+            "promoted_type": "promoted_lance",
+            "directions": [(0, -1, "line")],  # 前に何マスでも
+        },
+        "knight": {
+            "symbol": "桂",
+            "can_promote": True,
+            "promoted_type": "promoted_knight",
+            "directions": [(-1, -2), (1, -2)],  # 前に2マス、横に1マス
+        },
+        "silver": {
+            "symbol": "銀",
+            "can_promote": True,
+            "promoted_type": "promoted_silver",
+            "directions": [(-1, -1), (0, -1), (1, -1), (-1, 1), (1, 1)],  # 銀の動き
+        },
+        "gold": {
+            "symbol": "金",
+            "can_promote": False,
+            "promoted_type": None,
+            "directions": Gold_directions,  # 金の動き
+        },
+        "bishop": {
+            "symbol": "角",
+            "can_promote": True,
+            "promoted_type": "promoted_bishop",
+            "directions": Bishop_directions,  # 角の動き
+        },
+        "rook": {
+            "symbol": "飛",
+            "can_promote": True,
+            "promoted_type": "promoted_rook",
+            "directions": Rook_directions,  # 飛車の動き
+        },
+        "king": {
+            "symbol": "玉",
+            "can_promote": False,
+            "promoted_type": None,
+            "directions": [(-1, -1), (0, -1), (1, -1), (-1, 0), (1, 0), (-1, 1), (0, 1), (1, 1)],  # 玉の動き
+        },
+        
+        # 成り駒
+        "promoted_pawn": {
+            "symbol": "と",
+            "can_promote": False,
+            "base_type": "pawn",
+            "directions": Gold_directions,  # 金と同じ動き
+        },
+        "promoted_lance": {
+            "symbol": "成香",
+            "can_promote": False,
+            "base_type": "lance",
+            "directions": Gold_directions,  # 金と同じ動き
+        },
+        "promoted_knight": {
+            "symbol": "成桂",
+            "can_promote": False,
+            "base_type": "knight",
+            "directions": Gold_directions,  # 金と同じ動き
+        },
+        "promoted_silver": {
+            "symbol": "成銀",
+            "can_promote": False,
+            "base_type": "silver",
+            "directions": Gold_directions,  # 金と同じ動き
+        },
+        "promoted_bishop": {
+            "symbol": "馬",
+            "can_promote": False,
+            "base_type": "bishop",
+            "directions": Bishop_directions + [(0, -1), (-1, 0), (1, 0), (0, 1)],  # 追加の動き（十字1マス）
+        },
+        "promoted_rook": {
+            "symbol": "龍",
+            "can_promote": False,
+            "base_type": "rook",
+            "directions": Rook_directions + [(-1, -1), (1, -1), (-1, 1), (1, 1)],  # 追加の動き（斜め1マス）
+        },
+    }
     
-    def __post_init__(self):
-        """初期化後の処理"""
-        # 成り駒の場合はpromotedフラグを設定
-        if self.piece_type in [
-            PieceType.PROMOTED_PAWN, PieceType.PROMOTED_LANCE, 
-            PieceType.PROMOTED_KNIGHT, PieceType.PROMOTED_SILVER,
-            PieceType.PROMOTED_BISHOP, PieceType.PROMOTED_ROOK
-        ]:
+    def __init__(self, piece_type: str, player: Player, promoted: bool = False):
+        """
+        駒の初期化
+        
+        Args:
+            piece_type: 駒の種類（"pawn", "lance"など）
+            player: プレイヤー（先手/後手）
+            promoted: 成り駒かどうか
+        """
+        # 成り駒の場合はpiece_typeを調整
+        if promoted and piece_type in self.PIECE_INFO and self.PIECE_INFO[piece_type]["can_promote"]:
+            self.piece_type = self.PIECE_INFO[piece_type]["promoted_type"]
             self.promoted = True
+        elif piece_type in self.PIECE_INFO:
+            self.piece_type = piece_type
+            self.promoted = piece_type.startswith("promoted_")
+        else:
+            raise ValueError(f"不明な駒タイプ: {piece_type}")
+            
+        self.player = player
     
     @property
     def name(self) -> str:
         """駒の名前を取得"""
-        name_map = {
-            PieceType.PAWN: "pawn",
-            PieceType.LANCE: "lance", 
-            PieceType.KNIGHT: "knight",
-            PieceType.SILVER: "silver",
-            PieceType.GOLD: "gold",
-            PieceType.BISHOP: "bishop",
-            PieceType.ROOK: "rook",
-            PieceType.KING: "king",
-            PieceType.PROMOTED_PAWN: "promoted_pawn",
-            PieceType.PROMOTED_LANCE: "promoted_lance",
-            PieceType.PROMOTED_KNIGHT: "promoted_knight", 
-            PieceType.PROMOTED_SILVER: "promoted_silver",
-            PieceType.PROMOTED_BISHOP: "promoted_bishop",
-            PieceType.PROMOTED_ROOK: "promoted_rook"
-        }
-        return name_map[self.piece_type]
+        return self.piece_type
     
     @property
-    def base_piece_type(self) -> PieceType:
-        """元の駒の種類を取得（成り駒の場合）"""
-        if not self.promoted:
-            return self.piece_type
-            
-        base_map = {
-            PieceType.PROMOTED_PAWN: PieceType.PAWN,
-            PieceType.PROMOTED_LANCE: PieceType.LANCE,
-            PieceType.PROMOTED_KNIGHT: PieceType.KNIGHT,
-            PieceType.PROMOTED_SILVER: PieceType.SILVER,
-            PieceType.PROMOTED_BISHOP: PieceType.BISHOP,
-            PieceType.PROMOTED_ROOK: PieceType.ROOK
-        }
-        return base_map.get(self.piece_type, self.piece_type)
+    def __str__(self) -> str:
+        """文字列表現"""
+        symbol = self.PIECE_INFO[self.piece_type]["symbol"]
+        if self.player == Player.GOTE:
+            return f"v{symbol}"
+        return symbol
+
     
+    @property
     def can_promote(self) -> bool:
         """駒が成れるかどうかを判定"""
-        if self.promoted:
-            return False
-            
-        # 金と玉は成れない
-        if self.piece_type in [PieceType.GOLD, PieceType.KING]:
-            return False
-            
-        return True
+        return self.PIECE_INFO[self.piece_type]["can_promote"]
     
-    def get_promoted_piece_type(self) -> PieceType:
-        """成り駒の種類を取得"""
-        if not self.can_promote():
-            return self.piece_type
-            
-        promote_map = {
-            PieceType.PAWN: PieceType.PROMOTED_PAWN,
-            PieceType.LANCE: PieceType.PROMOTED_LANCE,
-            PieceType.KNIGHT: PieceType.PROMOTED_KNIGHT,
-            PieceType.SILVER: PieceType.PROMOTED_SILVER,
-            PieceType.BISHOP: PieceType.PROMOTED_BISHOP,
-            PieceType.ROOK: PieceType.PROMOTED_ROOK
-        }
-        return promote_map.get(self.piece_type, self.piece_type)
+    def get_promoted_piece(self) -> 'ShogiPiece':
+        """成り駒を取得"""
+        if not self.can_promote:
+            return self
+        
+        promoted_type = self.PIECE_INFO[self.piece_type]["promoted_type"]
+        if promoted_type:
+            return ShogiPiece(self.piece_type, self.player, promoted=True)
+        
+        return self
+    
+    @property
+    def base_piece_type(self) -> str:
+        """元の駒の種類を取得（成り駒の場合）"""
+        if self.promoted and "base_type" in self.PIECE_INFO[self.piece_type]:
+            return self.PIECE_INFO[self.piece_type]["base_type"]
+        return self.piece_type
+    
+    def get_directions(self) -> List[Tuple]:
+        """駒の移動方向を取得"""
+        return self.PIECE_INFO[self.piece_type]["directions"]
     
     def get_moves(self, position: Tuple[int, int], board) -> List[Tuple[int, int]]:
         """
@@ -124,110 +181,41 @@ class ShogiPiece:
         row, col = position
         moves = []
         
-        # 駒の種類に応じた移動処理
-        if self.piece_type == PieceType.PAWN:
-            # 歩兵
-            if self.player == Player.SENTE:  # 先手
-                moves.append((row - 1, col))
-            else:  # 後手
-                moves.append((row + 1, col))
-                
-        elif self.piece_type == PieceType.LANCE:
-            # 香車
-            direction = -1 if self.player == Player.SENTE else 1
-            for i in range(1, 9):
-                new_row = row + i * direction
-                if 0 <= new_row < 9:
-                    moves.append((new_row, col))
-                    if board[new_row][col] is not None:
-                        break
+        # 駒の移動方向を取得
+        directions = self.get_directions()
+        
+        # 後手の場合は方向を反転
+        if self.player == Player.GOTE:
+            new_directions = []
+            for d in directions:
+                if len(d) == 2:
+                    dx, dy = d
+                    new_directions.append((-dx, -dy))
                 else:
-                    break
-                    
-        elif self.piece_type == PieceType.KNIGHT:
-            # 桂馬
-            if self.player == Player.SENTE:  # 先手
-                moves.extend([(row - 2, col - 1), (row - 2, col + 1)])
-            else:  # 後手
-                moves.extend([(row + 2, col - 1), (row + 2, col + 1)])
-                
-        elif self.piece_type == PieceType.SILVER:
-            # 銀
-            if self.player == Player.SENTE:  # 先手
-                moves.extend([
-                    (row - 1, col - 1), (row - 1, col), (row - 1, col + 1),
-                    (row + 1, col - 1), (row + 1, col + 1)
-                ])
-            else:  # 後手
-                moves.extend([
-                    (row + 1, col - 1), (row + 1, col), (row + 1, col + 1),
-                    (row - 1, col - 1), (row - 1, col + 1)
-                ])
-                
-        elif self.piece_type == PieceType.GOLD or self.promoted:
-            # 金または成り駒
-            if self.player == Player.SENTE:  # 先手
-                moves.extend([
-                    (row - 1, col - 1), (row - 1, col), (row - 1, col + 1),
-                    (row, col - 1), (row, col + 1),
-                    (row + 1, col)
-                ])
-            else:  # 後手
-                moves.extend([
-                    (row + 1, col - 1), (row + 1, col), (row + 1, col + 1),
-                    (row, col - 1), (row, col + 1),
-                    (row - 1, col)
-                ])
-                
-        elif self.piece_type == PieceType.BISHOP:
-            # 角
-            directions = [(-1, -1), (-1, 1), (1, -1), (1, 1)]
-            for dr, dc in directions:
-                for i in range(1, 9):
-                    new_row, new_col = row + i * dr, col + i * dc
+                    dx, dy, line = d
+                    new_directions.append((-dx, -dy, line))
+            directions = new_directions
+        
+        # 各方向について移動可能な位置を計算
+        for direction in directions:
+            if len(direction) == 3 and direction[2] == "line":
+                # 直線移動（飛車、角、香車など）
+                dx, dy = direction[0], direction[1]
+                for i in range(1, 9):  # 最大8マス移動可能
+                    new_row, new_col = row + dy * i, col + dx * i
                     if 0 <= new_row < 9 and 0 <= new_col < 9:
                         moves.append((new_row, new_col))
-                        if board[new_row][col] is not None:
+                        # 駒があれば、そこで止まる
+                        if board[new_row][new_col] is not None:
                             break
                     else:
                         break
-                        
-            # 成り角（馬）の場合は十字方向にも1マス移動可能
-            if self.promoted:
-                for dr, dc in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
-                    new_row, new_col = row + dr, col + dc
-                    if 0 <= new_row < 9 and 0 <= new_col < 9:
-                        moves.append((new_row, new_col))
-                
-        elif self.piece_type == PieceType.ROOK:
-            # 飛車
-            directions = [(0, 1), (1, 0), (0, -1), (-1, 0)]
-            for dr, dc in directions:
-                for i in range(1, 9):
-                    new_row, new_col = row + i * dr, col + i * dc
-                    if 0 <= new_row < 9 and 0 <= new_col < 9:
-                        moves.append((new_row, new_col))
-                        if board[new_row][col] is not None:
-                            break
-                    else:
-                        break
-                        
-            # 成り飛車（龍）の場合は斜め方向にも1マス移動可能
-            if self.promoted:
-                for dr, dc in [(-1, -1), (-1, 1), (1, -1), (1, 1)]:
-                    new_row, new_col = row + dr, col + dc
-                    if 0 <= new_row < 9 and 0 <= new_col < 9:
-                        moves.append((new_row, new_col))
-                
-        elif self.piece_type == PieceType.KING:
-            # 玉/王
-            for dr in [-1, 0, 1]:
-                for dc in [-1, 0, 1]:
-                    if dr == 0 and dc == 0:
-                        continue
-                    new_row, new_col = row + dr, col + dc
-                    if 0 <= new_row < 9 and 0 <= new_col < 9:
-                        moves.append((new_row, new_col))
+            else:
+                # 1マス移動（金、銀、桂馬など）
+                dx, dy = direction[0], direction[1]
+                new_row, new_col = row + dy, col + dx
+                if 0 <= new_row < 9 and 0 <= new_col < 9:
+                    moves.append((new_row, new_col))
         
         # 盤外や自分の駒があるマスを除外
         valid_moves = []
@@ -248,7 +236,7 @@ class ShogiPiece:
         Returns:
             成れるかどうか
         """
-        if not self.can_promote():
+        if not self.can_promote:
             return False
             
         from_pos, to_pos = move
@@ -271,35 +259,23 @@ class ShogiPiece:
         Returns:
             成らなければならないかどうか
         """
-        if self.promoted or self.piece_type not in [PieceType.PAWN, PieceType.LANCE, PieceType.KNIGHT]:
+        if self.promoted:
             return False
             
         _, to_pos = move
         to_row, _ = to_pos
         
-        if self.player == Player.SENTE:  # 先手
-            if self.piece_type in [PieceType.PAWN, PieceType.LANCE]:
+        # 歩、香車、桂馬は特定の位置で成らなければならない
+        if self.piece_type == "pawn" or self.piece_type == "lance":
+            if self.player == Player.SENTE:  # 先手
                 return to_row == 0
-            elif self.piece_type == PieceType.KNIGHT:
-                return to_row <= 1
-        else:  # 後手
-            if self.piece_type in [PieceType.PAWN, PieceType.LANCE]:
+            else:  # 後手
                 return to_row == 8
-            elif self.piece_type == PieceType.KNIGHT:
+        elif self.piece_type == "knight":
+            if self.player == Player.SENTE:  # 先手
+                return to_row <= 1
+            else:  # 後手
                 return to_row >= 7
                 
         return False
-    
-    def __str__(self) -> str:
-        """文字列表現"""
-        symbols = {
-            PieceType.PAWN: "歩", PieceType.LANCE: "香", PieceType.KNIGHT: "桂", PieceType.SILVER: "銀",
-            PieceType.GOLD: "金", PieceType.BISHOP: "角", PieceType.ROOK: "飛", PieceType.KING: "玉",
-            PieceType.PROMOTED_PAWN: "と", PieceType.PROMOTED_LANCE: "成香", PieceType.PROMOTED_KNIGHT: "成桂",
-            PieceType.PROMOTED_SILVER: "成銀", PieceType.PROMOTED_BISHOP: "馬", PieceType.PROMOTED_ROOK: "龍"
-        }
-        piece = symbols.get(self.piece_type, "?")
-        if self.player == Player.GOTE:
-            return f"v{piece}"
-        return piece
 
