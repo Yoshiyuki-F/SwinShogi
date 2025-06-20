@@ -18,7 +18,7 @@ import logging
 from src.model.swin_shogi import create_swin_shogi_model
 from src.shogi.shogi_pieces import ShogiGame
 from src.rl.mcts import MCTS
-from src.core.actor_critic import ActorCritic
+from src.model.actor_critic import ActorCritic
 
 # ロガーの設定
 logging.basicConfig(

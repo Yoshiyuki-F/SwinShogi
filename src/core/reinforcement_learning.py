@@ -11,10 +11,10 @@ import logging
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 
 # 分割したモジュールをインポート
-from src.core.jax_utils import setup_jax, create_rng_keys
-from src.core.actor_critic import ActorCritic
-from src.core.trainer import Trainer, TrainState, PolicyGradientLoss
-from src.core.self_play import SelfPlay
+from src.utils.jax_utils import setup_jax, create_rng_keys
+from src.model.actor_critic import ActorCritic
+from src.rl.trainer import Trainer, TrainState, PolicyGradientLoss
+from src.rl.self_play import SelfPlay
 
 from src.shogi.board_encoder import create_initial_board, visualize_board
 from config.default_config import MCTS_CONFIG
@@ -41,7 +41,6 @@ def main():
     initial_board = create_initial_board()
     visualize_board(initial_board)
     
-
     print(f"\nMCTS設定:")
     for key, value in MCTS_CONFIG.items():
         print(f"  {key}: {value}")
