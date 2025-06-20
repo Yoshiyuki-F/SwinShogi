@@ -13,14 +13,14 @@ import os
 import sys
 import time
 from dataclasses import dataclass
-from typing import Dict, List, Tuple, Optional, Any
+from typing import Dict, List, Tuple, Any
 from collections import defaultdict
 
 # プロジェクトのルートディレクトリをPythonパスに追加
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 
 from config.default_config import MCTS_CONFIG
-from src.shogi.board_encoder import encode_board_state, visualize_board
+from src.shogi.board_visualizer import BoardVisualizer
 
 
 @dataclass
@@ -470,7 +470,7 @@ def test_mcts():
     from src.shogi.board_encoder import create_initial_board
     state = create_initial_board()
     print("初期盤面:")
-    print(visualize_board(state))
+    print(BoardVisualizer.visualize_board(state))
     
     # MCTSの設定（テスト用に一部パラメータをオーバーライド）
     config = MCTSConfig(

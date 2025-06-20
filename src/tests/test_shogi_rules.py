@@ -1,5 +1,5 @@
 import unittest
-from src.shogi.shogi_pieces import ShogiGame
+from src.shogi.shogi_game import ShogiGame
 
 class TestShogiRules(unittest.TestCase):
     def setUp(self):
