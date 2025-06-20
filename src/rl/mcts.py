@@ -20,13 +20,7 @@ from collections import defaultdict
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 
 from config.default_config import MCTS_CONFIG
-from src.shogi.shogi_pieces import (
-    EMPTY, PAWN_S, LANCE_S, KNIGHT_S, SILVER_S, GOLD_S, BISHOP_S, ROOK_S, KING_S,
-    PAWN_G, LANCE_G, KNIGHT_G, SILVER_G, GOLD_G, BISHOP_G, ROOK_G, KING_G,
-    SENTE, GOTE, get_piece_owner, can_promote, get_base_piece, is_promoted,
-    promoted_piece, piece_moves, long_move_pieces
-)
-from src.shogi.board_encoder import encode_board, visualize_board
+from src.shogi.board_encoder import encode_board_state, visualize_board
 
 
 @dataclass
@@ -401,7 +395,17 @@ class MCTS:
             # 確率に基づいてランダムに行動を選択
             actions = list(probs.keys())
             probabilities = list(probs.values())
-            action = np.random.choice(actions, p=probabilities)
+            
+            # 確率の合計が1になるように正規化
+            probabilities = np.array(probabilities)
+            if probabilities.sum() > 0:
+                probabilities = probabilities / probabilities.sum()
+            else:
+                probabilities = np.ones_like(probabilities) / len(probabilities)
+                
+            # ランダムに選択
+            idx = np.random.choice(len(actions), p=probabilities)
+            action = actions[idx]
             
             return action, probs
     
@@ -460,59 +464,64 @@ class MCTSTrainer(RLTrainer):
 
 def test_mcts():
     """MCTSのテスト"""
-    from model.swin_shogi import SwinShogiModel
-    from config.default_config import MODEL_CONFIG
+    print("MCTSテスト開始")
     
-    # シード固定
-    key = jax.random.PRNGKey(42)
-    
-    # モデルの初期化
-    model = SwinShogiModel(
-        embed_dim=MODEL_CONFIG['embed_dim'],
-        depths=MODEL_CONFIG['depths'],
-        num_heads=MODEL_CONFIG['num_heads'],
-        window_size=MODEL_CONFIG['window_size'],
-        mlp_ratio=MODEL_CONFIG['mlp_ratio'],
-        dropout=MODEL_CONFIG['dropout'],
-        policy_dim=MODEL_CONFIG['policy_dim']
-    )
-    
-    # 初期盤面を作成
-    board, hands, turn = create_initial_board()
+    # 初期盤面を作成して表示
+    from src.shogi.board_encoder import create_initial_board
+    state = create_initial_board()
     print("初期盤面:")
-    print(visualize_board(board, hands, turn))
-    
-    # 盤面をエンコード（モデル初期化用）
-    features = encode_board(board, hands, turn)
-    features = jnp.expand_dims(features, axis=0)  # バッチ次元を追加
-    
-    # パラメータ初期化
-    params = model.init(key, features)
+    print(visualize_board(state))
     
     # MCTSの設定（テスト用に一部パラメータをオーバーライド）
     config = MCTSConfig(
         simulation_times=10       # テスト用にシミュレーション回数を少なくする
     )
     
+    # モックオブジェクトを作成
+    class MockGame:
+        def clone(self):
+            return self
+        def move(self, action):
+            pass
+        def is_terminal(self):
+            return False
+        def get_features(self):
+            return np.zeros((9, 9, 119))  # ダミーの特徴量
+        def get_valid_moves(self):
+            return [(0, 0), (0, 1), (1, 0)]
+        def get_state_hash(self):
+            return "test_state"
+    
+    class MockActorCritic:
+        def predict(self, state_features):
+            # ダミーの方策と価値を返す
+            return {(0, 0): 0.5, (0, 1): 0.3, (1, 0): 0.2}, 0.1
+    
     # MCTSを初期化
-    mcts = MCTS(model, params, config)
+    mock_game = MockGame()
+    mock_actor_critic = MockActorCritic()
+    mcts = MCTS(mock_game, mock_actor_critic)
     
     # 探索を実行
     print("MCTS探索を実行中...")
     start_time = time.time()
-    best_move, visit_counts, action_probs = mcts.search()
+    
+    # 複数回の探索を実行
+    for _ in range(config.simulation_times):
+        mcts.search()
+    
+    # 行動確率を取得
+    best_move, action_probs = mcts.get_action_probabilities(temperature=1.0)
     end_time = time.time()
     
     print(f"探索時間: {end_time - start_time:.2f}秒")
     print(f"最適な手: {best_move}")
-    print(f"訪問回数: {visit_counts}")
     print(f"行動確率: {action_probs}")
     
-    # 手を実行
-    new_board, new_hands, new_turn = mcts._apply_move(best_move)
+    # 注: 実際の手の適用はゲームインスタンスを通じて行う必要があります
+    # このテスト関数では盤面の変更は行わず、結果のみを表示します
     
-    print("\n手を実行後の盤面:")
-    print(visualize_board(new_board, new_hands, new_turn))
+    print("\n探索完了")
     
     return mcts, best_move
 

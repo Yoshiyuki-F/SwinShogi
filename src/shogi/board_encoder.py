@@ -3,26 +3,13 @@
 import numpy as np
 from .shogi_pieces import *
 
-def encode_board(state):
+def encode_board_state(state):
     """
     将棋の状態をニューラルネットワークの入力形式にエンコード
     
     Args:
         state: 将棋環境の状態 (盤面、持ち駒、手番を含む)
-    
-    Returns:
-        numpy.ndarray: エンコードされた状態 (チャネル, 高さ, 幅)
-    """
-    return encode_board_state(state)
 
-def encode_board_state(state, history_length=8):
-    """
-    将棋の状態をニューラルネットワークの入力形式にエンコード
-    
-    Args:
-        state: 将棋環境の状態 (盤面、持ち駒、手番を含む)
-        history_length: 履歴として含める過去の状態数
-    
     Returns:
         numpy.ndarray: エンコードされた状態 (チャネル, 高さ, 幅)
     """

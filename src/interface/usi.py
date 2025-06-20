@@ -11,23 +11,14 @@ import jax
 # プロジェクトのルートディレクトリをPythonパスに追加
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 
-from ..model.swin_shogi import SwinShogiModel
-from ..utils.model_utils import load_params
-from ..shogi.board_encoder import encode_position
 from ..shogi.shogi_pieces import *
-from ..rl.rl_config import RLConfig
-from ..rl.mcts import MCTS, MCTSConfig
-from ..rl.shogi_env import ShogiEnv
-from config import USI_CONFIG, PATHS
-import subprocess
 
 import threading
 import logging
-import numpy as np
 from src.model.swin_shogi import create_swin_shogi_model
 from src.shogi.shogi_pieces import ShogiGame
 from src.rl.mcts import MCTS
-from src.core.reinforcement_learning import ActorCritic
+from src.core.actor_critic import ActorCritic
 
 # ロガーの設定
 logging.basicConfig(

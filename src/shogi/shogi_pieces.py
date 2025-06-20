@@ -1,8 +1,7 @@
 """
 将棋のルールと駒の動きを実装するモジュール
 """
-from typing import List, Dict, Tuple, Set, Optional
-import re
+from typing import List,  Tuple
 import hashlib
 
 # 定数定義：駒の種類
