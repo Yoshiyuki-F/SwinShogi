@@ -295,32 +295,16 @@ class ShogiGame:
         
         # 持ち駒を打つ手
         if '*' in move_str:
-            piece_type_char = move_str[0].lower()
+            piece_type_char = move_str[0]
             to_square = move_str[2:]
             to_row, to_col = self.square_to_coords(to_square)
             
             # 駒の種類を特定
-            if piece_type_char == 'p':
-                piece_type = "pawn"
-                piece_name = "pawn"
-            elif piece_type_char == 'l':
-                piece_type = "lance"
-                piece_name = "lance"
-            elif piece_type_char == 'n':
-                piece_type = "knight"
-                piece_name = "knight"
-            elif piece_type_char == 's':
-                piece_type = "silver"
-                piece_name = "silver"
-            elif piece_type_char == 'g':
-                piece_type = "gold"
-                piece_name = "gold"
-            elif piece_type_char == 'b':
-                piece_type = "bishop"
-                piece_name = "bishop"
-            elif piece_type_char == 'r':
-                piece_type = "rook"
-                piece_name = "rook"
+            if piece_type_char in ShogiPiece.PIECE_CHAR_INFO:
+                piece_type = ShogiPiece.PIECE_CHAR_INFO[piece_type_char]["type"]
+                piece_name = piece_type  # 持ち駒の場合、piece_nameはpiece_typeと同じ
+            else:
+                return False
             
             # 持ち駒を減らす
             self.captures[self.current_player][piece_name] -= 1

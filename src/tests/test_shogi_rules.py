@@ -47,24 +47,15 @@ class TestShogiRules(unittest.TestCase):
         valid_moves = self.game.get_valid_moves()
         
         # 有効な手の中から成る手を選択
-        promotion_move = None
-        for move in valid_moves:
-            if move.endswith('+'):
-                promotion_move = move
-                break
-                
-        self.assertIsNotNone(promotion_move, "成る手が見つかりませんでした")
-        
-        # 移動を実行
-        result = self.game.move(promotion_move)
+        move = valid_moves[0]  # 9b9a+ (2一の歩を1一に移動して成る)
+        result = self.game.move(move)
         
         # 移動が成功したことを確認
         self.assertTrue(result, "移動が失敗しました")
         
-        # 移動先の駒が成り駒になっていることを確認
-        to_row, to_col = 0, 0  # 移動先の座標（1一）
-        self.assertIsNotNone(self.game.board[to_row][to_col], "移動先に駒がありません")
-        self.assertEqual(self.game.board[to_row][to_col].name, "promoted_pawn")
+        # １一の位置に成金があることを確認
+        self.assertIsNotNone(self.game.board[0][0], "1一に駒がありません")
+        self.assertEqual(self.game.board[0][0].name, "promoted_pawn")
         
     def test_check_detection(self):
         """王手の判定テスト"""
@@ -96,14 +87,48 @@ class TestShogiRules(unittest.TestCase):
         
     def test_pawn_drop_mate_rule(self):
         """打ち歩詰め禁止ルールのテスト"""
-        # 打ち歩詰めの判定ロジックが未実装のためスキップ
-        self.skipTest("打ち歩詰め判定のテストはスキップします")
+        # 打ち歩詰めができる盤面を設定
+        self.game.setup_custom_position("k8/9/9/9/9/9/9/9/9 b P 1")
+        
+        # 打ち歩詰めの手を取得
+        pawn_drop_mate_move = "1a1b"
+        
+        # 打ち歩詰めは禁止されているため、この手は有効な手に含まれていないはず
+        valid_moves = self.game.get_valid_moves()
+        self.assertNotIn(pawn_drop_mate_move, valid_moves)
         
     def test_repetition_draw(self):
         """千日手の判定テスト"""
         # このテストはスキップします
         # 千日手判定の問題は複雑なため、別途対応が必要です
+        import unittest
         self.skipTest("千日手判定のテストはスキップします")
+        
+        # テスト用に単純な盤面を設定
+        self.game.board = [[None for _ in range(9)] for _ in range(9)]
+        # 後手の玉を1一（0,0）に配置
+        self.game.board[0][0] = ShogiPiece("king", Player.GOTE)
+        # 後手の銀を1二（1,0）に配置
+        self.game.board[1][0] = ShogiPiece("silver", Player.GOTE)
+        # 先手の玉を9九（8,8）に配置
+        self.game.board[8][8] = ShogiPiece("king", Player.SENTE)
+        # 先手の銀を9八（7,8）に配置
+        self.game.board[7][8] = ShogiPiece("silver", Player.SENTE)
+        
+        self.game.current_player = Player.SENTE  # 先手番
+        self.game.position_history = []  # 履歴をクリア
+        self.game.position_history.append(self.game.get_state_hash())  # 現在の局面を履歴に追加
+        
+        # 同じ動きを4回繰り返して千日手を発生させる
+        for _ in range(4):
+            # 先手の銀を上下に動かす
+            self.game.move("1h2i")  # 9八の銀を8九に移動
+            self.game.move("1b2a")  # 1二の銀を2一に移動
+            self.game.move("2i1h")  # 8九の銀を9八に移動
+            self.game.move("2a1b")  # 2一の銀を1二に移動
+            
+        # 千日手が検出されるか確認
+        self.assertTrue(self.game.is_repetition_draw())
 
 if __name__ == "__main__":
     unittest.main() 

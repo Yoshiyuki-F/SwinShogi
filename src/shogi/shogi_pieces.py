@@ -14,95 +14,107 @@ class ShogiPiece:
     Gold_directions = [(-1, -1), (0, -1), (1, -1), (-1, 0), (1, 0), (0, 1)]
     Bishop_directions = [(-1, -1, "line"), (1, -1, "line"), (-1, 1, "line"), (1, 1, "line")]
     Rook_directions = [(0, -1, "line"), (-1, 0, "line"), (1, 0, "line"), (0, 1, "line")]
-    # 駒の情報を一元管理する辞書
-    PIECE_INFO = {
-        # 基本駒
-        "pawn": {
-            "symbol": "歩",
-            "can_promote": True,
-            "promoted_type": "promoted_pawn",
-            "directions": [(0, -1)],  # 前に1マス
+    
+    # 駒の文字と情報の対応
+    PIECE_CHAR_INFO = {
+        'p': {
+            "type": "pawn", 
+            "symbol": "歩", 
+            "can_promote": True, 
+            "promoted_type": "promoted_pawn", 
+            "directions": [(0, -1)]  # 前に1マス
         },
-        "lance": {
-            "symbol": "香",
-            "can_promote": True,
-            "promoted_type": "promoted_lance",
-            "directions": [(0, -1, "line")],  # 前に何マスでも
+        'l': {
+            "type": "lance", 
+            "symbol": "香", 
+            "can_promote": True, 
+            "promoted_type": "promoted_lance", 
+            "directions": [(0, -1, "line")]  # 前に何マスでも
         },
-        "knight": {
-            "symbol": "桂",
-            "can_promote": True,
-            "promoted_type": "promoted_knight",
-            "directions": [(-1, -2), (1, -2)],  # 前に2マス、横に1マス
+        'n': {
+            "type": "knight", 
+            "symbol": "桂", 
+            "can_promote": True, 
+            "promoted_type": "promoted_knight", 
+            "directions": [(-1, -2), (1, -2)]  # 前に2マス、横に1マス
         },
-        "silver": {
-            "symbol": "銀",
-            "can_promote": True,
-            "promoted_type": "promoted_silver",
-            "directions": [(-1, -1), (0, -1), (1, -1), (-1, 1), (1, 1)],  # 銀の動き
+        's': {
+            "type": "silver", 
+            "symbol": "銀", 
+            "can_promote": True, 
+            "promoted_type": "promoted_silver", 
+            "directions": [(-1, -1), (0, -1), (1, -1), (-1, 1), (1, 1)]  # 銀の動き
         },
-        "gold": {
-            "symbol": "金",
-            "can_promote": False,
-            "promoted_type": None,
-            "directions": Gold_directions,  # 金の動き
+        'g': {
+            "type": "gold", 
+            "symbol": "金", 
+            "can_promote": False, 
+            "promoted_type": None, 
+            "directions": Gold_directions  # 金の動き
         },
-        "bishop": {
-            "symbol": "角",
-            "can_promote": True,
-            "promoted_type": "promoted_bishop",
-            "directions": Bishop_directions,  # 角の動き
+        'b': {
+            "type": "bishop", 
+            "symbol": "角", 
+            "can_promote": True, 
+            "promoted_type": "promoted_bishop", 
+            "directions": Bishop_directions  # 角の動き
         },
-        "rook": {
-            "symbol": "飛",
-            "can_promote": True,
-            "promoted_type": "promoted_rook",
-            "directions": Rook_directions,  # 飛車の動き
+        'r': {
+            "type": "rook", 
+            "symbol": "飛", 
+            "can_promote": True, 
+            "promoted_type": "promoted_rook", 
+            "directions": Rook_directions  # 飛車の動き
         },
-        "king": {
-            "symbol": "玉",
-            "can_promote": False,
-            "promoted_type": None,
-            "directions": [(-1, -1), (0, -1), (1, -1), (-1, 0), (1, 0), (-1, 1), (0, 1), (1, 1)],  # 玉の動き
+        'k': {
+            "type": "king", 
+            "symbol": "玉", 
+            "can_promote": False, 
+            "promoted_type": None, 
+            "directions": [(-1, -1), (0, -1), (1, -1), (-1, 0), (1, 0), (-1, 1), (0, 1), (1, 1)]  # 玉の動き
         },
-        
-        # 成り駒
-        "promoted_pawn": {
-            "symbol": "と",
-            "can_promote": False,
-            "base_type": "pawn",
-            "directions": Gold_directions,  # 金と同じ動き
+        '+p': {
+            "type": "promoted_pawn", 
+            "symbol": "と", 
+            "can_promote": False, 
+            "base_type": "pawn", 
+            "directions": Gold_directions  # 金と同じ動き
         },
-        "promoted_lance": {
-            "symbol": "成香",
-            "can_promote": False,
-            "base_type": "lance",
-            "directions": Gold_directions,  # 金と同じ動き
+        '+l': {
+            "type": "promoted_lance", 
+            "symbol": "成香", 
+            "can_promote": False, 
+            "base_type": "lance", 
+            "directions": Gold_directions  # 金と同じ動き
         },
-        "promoted_knight": {
-            "symbol": "成桂",
-            "can_promote": False,
-            "base_type": "knight",
-            "directions": Gold_directions,  # 金と同じ動き
+        '+n': {
+            "type": "promoted_knight", 
+            "symbol": "成桂", 
+            "can_promote": False, 
+            "base_type": "knight", 
+            "directions": Gold_directions  # 金と同じ動き
         },
-        "promoted_silver": {
-            "symbol": "成銀",
-            "can_promote": False,
-            "base_type": "silver",
-            "directions": Gold_directions,  # 金と同じ動き
+        '+s': {
+            "type": "promoted_silver", 
+            "symbol": "成銀", 
+            "can_promote": False, 
+            "base_type": "silver", 
+            "directions": Gold_directions  # 金と同じ動き
         },
-        "promoted_bishop": {
-            "symbol": "馬",
-            "can_promote": False,
-            "base_type": "bishop",
-            "directions": Bishop_directions + [(0, -1), (-1, 0), (1, 0), (0, 1)],  # 追加の動き（十字1マス）
+        '+b': {
+            "type": "promoted_bishop", 
+            "symbol": "馬", 
+            "can_promote": False, 
+            "base_type": "bishop", 
+            "directions": Bishop_directions + [(0, -1), (-1, 0), (1, 0), (0, 1)]  # 追加の動き（十字1マス）
         },
-        "promoted_rook": {
-            "symbol": "龍",
-            "can_promote": False,
-            "base_type": "rook",
-            "directions": Rook_directions + [(-1, -1), (1, -1), (-1, 1), (1, 1)],  # 追加の動き（斜め1マス）
-        },
+        '+r': {
+            "type": "promoted_rook", 
+            "symbol": "龍", 
+            "can_promote": False, 
+            "base_type": "rook", 
+            "directions": Rook_directions + [(-1, -1), (1, -1), (-1, 1), (1, 1)]  # 追加の動き（斜め1マス）
+        }
     }
     
     def __init__(self, piece_type: str, player: Player, promoted: bool = False):
@@ -115,16 +127,42 @@ class ShogiPiece:
             promoted: 成り駒かどうか
         """
         # 成り駒の場合はpiece_typeを調整
-        if promoted and piece_type in self.PIECE_INFO and self.PIECE_INFO[piece_type]["can_promote"]:
-            self.piece_type = self.PIECE_INFO[piece_type]["promoted_type"]
+        if promoted and piece_type in self.get_promotable_types():
+            self.piece_type = self.get_promoted_type(piece_type)
             self.promoted = True
-        elif piece_type in self.PIECE_INFO:
+        elif piece_type in self.get_all_types():
             self.piece_type = piece_type
             self.promoted = piece_type.startswith("promoted_")
         else:
             raise ValueError(f"不明な駒タイプ: {piece_type}")
             
         self.player = player
+    
+    @classmethod
+    def get_all_types(cls):
+        """すべての駒タイプのリストを取得"""
+        return [info["type"] for info in cls.PIECE_CHAR_INFO.values()]
+    
+    @classmethod
+    def get_promotable_types(cls):
+        """成ることができる駒タイプのリストを取得"""
+        return [info["type"] for info in cls.PIECE_CHAR_INFO.values() if info.get("can_promote", False)]
+    
+    @classmethod
+    def get_promoted_type(cls, piece_type):
+        """指定された駒タイプの成り駒タイプを取得"""
+        for info in cls.PIECE_CHAR_INFO.values():
+            if info["type"] == piece_type and info.get("can_promote", False):
+                return info["promoted_type"]
+        return None
+    
+    @classmethod
+    def get_base_type(cls, piece_type):
+        """指定された成り駒タイプの元の駒タイプを取得"""
+        for info in cls.PIECE_CHAR_INFO.values():
+            if info["type"] == piece_type and "base_type" in info:
+                return info["base_type"]
+        return piece_type
     
     @property
     def name(self) -> str:
@@ -134,23 +172,38 @@ class ShogiPiece:
     @property
     def __str__(self) -> str:
         """文字列表現"""
-        symbol = self.PIECE_INFO[self.piece_type]["symbol"]
+        symbol = self.get_symbol(self.piece_type)
         if self.player == Player.GOTE:
             return f"v{symbol}"
         return symbol
-
+    
+    @classmethod
+    def get_symbol(cls, piece_type):
+        """指定された駒タイプのシンボルを取得"""
+        for info in cls.PIECE_CHAR_INFO.values():
+            if info["type"] == piece_type:
+                return info["symbol"]
+        return "?"
     
     @property
     def can_promote(self) -> bool:
         """駒が成れるかどうかを判定"""
-        return self.PIECE_INFO[self.piece_type]["can_promote"]
+        for info in self.PIECE_CHAR_INFO.values():
+            if info["type"] == self.piece_type:
+                return info.get("can_promote", False)
+        return False
     
     def get_promoted_piece(self) -> 'ShogiPiece':
         """成り駒を取得"""
         if not self.can_promote:
             return self
         
-        promoted_type = self.PIECE_INFO[self.piece_type]["promoted_type"]
+        promoted_type = None
+        for info in self.PIECE_CHAR_INFO.values():
+            if info["type"] == self.piece_type:
+                promoted_type = info.get("promoted_type")
+                break
+                
         if promoted_type:
             return ShogiPiece(self.piece_type, self.player, promoted=True)
         
@@ -159,13 +212,14 @@ class ShogiPiece:
     @property
     def base_piece_type(self) -> str:
         """元の駒の種類を取得（成り駒の場合）"""
-        if self.promoted and "base_type" in self.PIECE_INFO[self.piece_type]:
-            return self.PIECE_INFO[self.piece_type]["base_type"]
-        return self.piece_type
+        return self.get_base_type(self.piece_type)
     
     def get_directions(self) -> List[Tuple]:
         """駒の移動方向を取得"""
-        return self.PIECE_INFO[self.piece_type]["directions"]
+        for info in self.PIECE_CHAR_INFO.values():
+            if info["type"] == self.piece_type:
+                return info["directions"]
+        return []
     
     def get_moves(self, position: Tuple[int, int], board) -> List[Tuple[int, int]]:
         """
