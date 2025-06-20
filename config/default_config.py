@@ -2,17 +2,36 @@
 SwinShogiのデフォルト設定
 """
 from dataclasses import dataclass, field
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Tuple, Callable
+import flax.linen as nn
 
 # モデル設定
 MODEL_CONFIG = {
-    'embed_dim': 96,
-    'depths': (2, 2),
-    'num_heads': (8, 16),
-    'window_size': 3,
-    'mlp_ratio': 4.0,
-    'drop_rate': 0.0,
-    'n_policy_outputs': 2187
+    'img_size': (9, 9),             # 将棋盤のサイズ
+    'patch_size': (1, 1),           # パッチサイズ
+    'in_chans': 119,                # 入力チャネル数（駒の種類、位置、持ち駒など）
+    'embed_dim': 96,                # 埋め込み次元
+    'depths': (2, 2),               # 各段階の層の深さ
+    'num_heads': (3, 6),            # 各段階のヘッド数
+    'window_size': 3,               # 注意機構のウィンドウサイズ
+    'mlp_ratio': 4.0,               # MLPの拡大率
+    'qkv_bias': True,               # QKV投影にバイアスを使うかどうか
+    'drop_rate': 0.0,               # ドロップアウト率
+    'attn_drop_rate': 0.0,          # 注意機構のドロップアウト率
+    'drop_path_rate': 0.1,          # パスドロップ率
+    'norm_layer': nn.LayerNorm,     # 正規化層
+    'patch_norm': True,             # パッチ正規化を行うかどうか
+    'n_policy_outputs': 9*9*27,     # 政策出力（移動元×移動先×駒の種類）
+    'use_checkpoint': False,        # チェックポイントを使用するかどうか
+    'shift_size': 0,                # シフトサイズ（SW-MSA用）
+    'downsample': None,             # ダウンサンプリング関数
+    'default_img_size': (224, 224), # デフォルト画像サイズ（標準的なSwin Transformer用）
+    'default_patch_size': (4, 4),   # デフォルトパッチサイズ（標準的なSwin Transformer用）
+    'default_in_chans': 3,          # デフォルト入力チャネル数（標準的なSwin Transformer用）
+    'drop': 0.0,                    # 一般的なドロップアウト率
+    'drop_path': 0.0,               # パスドロップ率（個別ブロック用）
+    'input_resolution': (9, 9),     # 入力解像度
+    'patch_merge_factor': 3         # パッチ結合の分割係数（通常のSwinは2、このSwinは3）
 }
 
 # 強化学習設定
@@ -64,6 +83,36 @@ PATHS = {
     'model_dir': 'data/models',
     'data_dir': 'data/games'
 }
+
+# モデルアーキテクチャ設定
+@dataclass
+class ModelConfig:
+    """SwinShogiモデルの設定パラメータ"""
+    img_size: Tuple[int, int] = MODEL_CONFIG['img_size']
+    patch_size: Tuple[int, int] = MODEL_CONFIG['patch_size']
+    in_chans: int = MODEL_CONFIG['in_chans']
+    embed_dim: int = MODEL_CONFIG['embed_dim']
+    depths: Tuple[int, ...] = MODEL_CONFIG['depths']
+    num_heads: Tuple[int, ...] = MODEL_CONFIG['num_heads']
+    window_size: int = MODEL_CONFIG['window_size']
+    mlp_ratio: float = MODEL_CONFIG['mlp_ratio']
+    qkv_bias: bool = MODEL_CONFIG['qkv_bias']
+    drop_rate: float = MODEL_CONFIG['drop_rate']
+    attn_drop_rate: float = MODEL_CONFIG['attn_drop_rate']
+    drop_path_rate: float = MODEL_CONFIG['drop_path_rate']
+    norm_layer: Callable = MODEL_CONFIG['norm_layer']
+    patch_norm: bool = MODEL_CONFIG['patch_norm']
+    n_policy_outputs: int = MODEL_CONFIG['n_policy_outputs']
+    use_checkpoint: bool = MODEL_CONFIG['use_checkpoint']
+    shift_size: int = MODEL_CONFIG['shift_size']
+    downsample: Optional[Callable] = MODEL_CONFIG['downsample']
+    default_img_size: Tuple[int, int] = MODEL_CONFIG['default_img_size']
+    default_patch_size: Tuple[int, int] = MODEL_CONFIG['default_patch_size']
+    default_in_chans: int = MODEL_CONFIG['default_in_chans']
+    drop: float = MODEL_CONFIG['drop']
+    drop_path: float = MODEL_CONFIG['drop_path']
+    input_resolution: Tuple[int, int] = MODEL_CONFIG['input_resolution']
+    patch_merge_factor: int = MODEL_CONFIG['patch_merge_factor']
 
 # データクラス定義（rl_config.pyからマージ）
 
@@ -145,6 +194,7 @@ class RLConfig:
     mcts: MCTSConfig = field(default_factory=MCTSConfig)
     training: TrainingConfig = field(default_factory=TrainingConfig)
     selfplay: SelfPlayConfig = field(default_factory=SelfPlayConfig)
+    model: ModelConfig = field(default_factory=ModelConfig)
     
     # ロギング設定
     log_interval: int = 10                           # ログを出力する間隔（トレーニングステップ数）
@@ -166,6 +216,10 @@ def get_default_config() -> RLConfig:
     """デフォルト設定を取得する"""
     return RLConfig()
 
+def get_model_config() -> ModelConfig:
+    """モデル設定を取得する"""
+    return ModelConfig()
+
 def update_config(config: RLConfig, updates: Dict[str, Any]) -> RLConfig:
     """
     設定を更新する
@@ -179,7 +233,7 @@ def update_config(config: RLConfig, updates: Dict[str, Any]) -> RLConfig:
     """
     for key, value in updates.items():
         if hasattr(config, key):
-            if isinstance(value, dict) and isinstance(getattr(config, key), (MCTSConfig, TrainingConfig, SelfPlayConfig)):
+            if isinstance(value, dict) and isinstance(getattr(config, key), (MCTSConfig, TrainingConfig, SelfPlayConfig, ModelConfig)):
                 # ネストされた設定の更新
                 nested_config = getattr(config, key)
                 for nested_key, nested_value in value.items():

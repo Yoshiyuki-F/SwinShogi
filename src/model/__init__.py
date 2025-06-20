@@ -3,9 +3,20 @@
 """
 
 from .actor_critic import ActorCritic
-from .swin_shogi import create_swin_shogi_model
+from .shogi_model import create_swin_shogi_model, SwinShogiModel
+from .swin_transformer import (
+    MLP, WindowAttention, SwinTransformerBlock, PatchEmbed,
+    BasicLayer, PatchMerging
+)
 
 __all__ = [
     'ActorCritic',
-    'create_swin_shogi_model'
+    'create_swin_shogi_model',
+    'SwinShogiModel',
+    'MLP',
+    'WindowAttention',
+    'SwinTransformerBlock',
+    'PatchEmbed',
+    'BasicLayer',
+    'PatchMerging'
 ]
