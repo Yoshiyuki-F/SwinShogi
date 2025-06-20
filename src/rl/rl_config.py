@@ -3,7 +3,7 @@
 
 このモジュールでは、MCTSやトレーニングのハイパーパラメータなどの設定を定義します。
 """
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Dict, Any, Optional
 
 @dataclass
@@ -73,9 +73,9 @@ class RLConfig:
     """強化学習の全体設定"""
     
     # コンポーネント設定
-    mcts: MCTSConfig = MCTSConfig()
-    training: TrainingConfig = TrainingConfig()
-    selfplay: SelfPlayConfig = SelfPlayConfig()
+    mcts: MCTSConfig = field(default_factory=MCTSConfig)
+    training: TrainingConfig = field(default_factory=TrainingConfig)
+    selfplay: SelfPlayConfig = field(default_factory=SelfPlayConfig)
     
     # ロギング設定
     log_interval: int = 10           # ログを出力する間隔（トレーニングステップ数）

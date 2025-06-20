@@ -75,12 +75,14 @@ except Exception as e:
     import sys
     sys.exit(1)
 
-from src.shogi.board_encoder import encode_board, create_initial_board
+from src.shogi.board_encoder import encode_board, create_initial_board, visualize_board
 from src.model.swin_shogi import SwinShogiModel
 from src.rl.mcts import MCTSConfig
 from src.rl.rl_config import RLConfig
-from src.rl.shogi_rl import ShogiRL
-from src.utils.model_utils import save_params, load_params
+# 削除: ShogiRLは使用しないためインポートを削除
+# from src.rl.shogi_rl import ShogiRL
+# 削除: model_utilsモジュールは存在しないためインポートを削除
+# from src.utils.model_utils import save_params, load_params
 from config import PATHS
 
 # ロギング設定
@@ -132,7 +134,7 @@ class ActorCritic:
         policy_probs = jax.nn.softmax(policy_logits)
         
         # 確率を辞書形式に変換
-        # ここでは簡略化のため、インデックスから行動へのマッピングは実装していない
+        # ここでは簡略化のため、インデックスから行動へのマッピングは実装していない　TODO
         # 実際には駒の移動やその他のゲーム固有の行動にマッピングする必要がある
         action_probs = {i: float(prob) for i, prob in enumerate(policy_probs) if prob > 0.001}
         
@@ -587,6 +589,16 @@ def default_mcts_config():
 def main():
     # シード固定
     key = jax.random.PRNGKey(42)
+    
+    print("reinforcement_learning.py 内の main 関数は ShogiRL を使用するため無効化されています。")
+    print("board_encoder.py が実装され、visualize_board 関数も追加されました。")
+    
+    # テスト：初期盤面を生成して表示
+    print("\n初期盤面のテスト:")
+    initial_board = create_initial_board()
+    visualize_board(initial_board)
+    
+    """
     # モデルの初期化
     model = SwinShogiModel(
         embed_dim=128,              # 埋め込み次元を96→128に増加
@@ -594,41 +606,30 @@ def main():
         num_heads=(8, 16),
         window_size=3,
         mlp_ratio=4.0,
-        dropout=0.0,
-        policy_dim=2187
+        drop_rate=0.0,              # dropout → drop_rate に修正
+        n_policy_outputs=2187       # policy_dim → n_policy_outputs に修正
     )
     # 初期盤面を作成（モデル初期化用）
-    board, hands, turn = create_initial_board()
-    features = encode_board(board, hands, turn)
+    features = encode_board(create_initial_board())
+    print(f"エンコードされた特徴量の形状: {features.shape}")
+    # (channels, height, width) -> (height, width, channels) に転置
+    features = jnp.transpose(features, (1, 2, 0))
+    print(f"転置後の特徴量の形状: {features.shape}")
     features = jnp.expand_dims(features, axis=0)
+    print(f"バッチ次元追加後の特徴量の形状: {features.shape}")
     params = model.init(key, features)
+    """
 
-    
     # 強化学習の設定
-    rl_config = RLConfig(
-        num_iterations=5,           # 学習反復回数を1→5に増加
-        num_episodes=3,             # エピソード数を1→3に増加
-        max_moves=300,
-        batch_size=64,              # バッチサイズを10→64に増加
-        mcts_config=MCTSConfig(
-            simulation_times=500,   # シミュレーション回数を10→500に増加
-            expansion_threshold=1,
-            uct_c=1.5
-        )
+    from src.rl.rl_config import MCTSConfig as MCTSConfigNew
+    from src.rl.mcts import MCTSConfig
+    
+    # 設定を初期化
+    mcts_config = MCTSConfig(
+        simulation_times=500,   # シミュレーション回数を10→500に増加
+        expansion_threshold=1,
+        uct_c=1.5
     )
-    # 強化学習を初期化
-    rl = ShogiRL(model, params, rl_config)
-    # 自己対局・学習
-    print("自己対局のテスト:")
-    rl.self_play()
-    if len(rl.replay_buffer) >= rl.config.batch_size:
-        print("\n学習のテスト:")
-        rl.train()
-        # モデルパラメータ保存
-        save_params(rl.params, PATHS['model_params'])
-        print(f"モデルパラメータを保存しました: {PATHS['model_params']}")
-    else:
-        raise ValueError(f"リプレイバッファのサイズが不足しています。{len(rl.replay_buffer)}/{rl.config.batch_size}")
 
 
 if __name__ == "__main__":

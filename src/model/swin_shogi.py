@@ -38,9 +38,9 @@ class WindowAttention(nn.Module):
     def setup(self):
         self.scale = (self.dim // self.num_heads) ** -0.5
         self.qkv = nn.Dense(self.dim * 3, use_bias=self.qkv_bias)
-        self.attn_drop = nn.Dropout(rate=self.attn_drop)
+        self.attn_dropout = nn.Dropout(rate=self.attn_drop)
         self.proj = nn.Dense(self.dim)
-        self.proj_drop = nn.Dropout(rate=self.proj_drop)
+        self.proj_dropout = nn.Dropout(rate=self.proj_drop)
 
     def __call__(self, x, mask=None, deterministic: bool = True):
         B, H, W, C = x.shape
@@ -64,12 +64,12 @@ class WindowAttention(nn.Module):
             attn = attn.reshape(B, self.num_heads, N, N)
         
         attn = nn.softmax(attn, axis=-1)
-        attn = self.attn_drop(attn, deterministic=deterministic)
+        attn = self.attn_dropout(attn, deterministic=deterministic)
 
         # 出力投影
         x = jnp.transpose(attn @ v, (0, 2, 1, 3)).reshape(B, N, C)
         x = self.proj(x)
-        x = self.proj_drop(x, deterministic=deterministic)
+        x = self.proj_dropout(x, deterministic=deterministic)
         x = x.reshape(B, H, W, C)
         return x
 
@@ -243,19 +243,20 @@ class BasicLayer(nn.Module):
 
         # パッチ結合レイヤー
         if self.downsample is not None:
-            self.downsample = self.downsample(
+            self.ds = self.downsample(
                 input_resolution=self.input_resolution,
                 dim=self.dim,
                 norm_layer=self.norm_layer
             )
         else:
-            self.downsample = nn.Identity()
+            self.ds = None
 
     def __call__(self, x, deterministic: bool = True):
         for blk in self.blocks:
             x = blk(x, deterministic=deterministic)
         
-        x = self.downsample(x)
+        if self.ds is not None:
+            x = self.ds(x)
         return x
 
 class PatchMerging(nn.Module):
@@ -333,9 +334,9 @@ class SwinShogiModel(nn.Module):
         dpr = [x for x in np.linspace(0, self.drop_path_rate, sum(self.depths))]
         
         # ネットワークの段階的な構築
-        self.layers = []
-        for i_layer in range(self.num_layers):
-            layer = BasicLayer(
+        # リストではなくModuleDictを使用
+        self.layers = {
+            f'layer{i}': BasicLayer(
                 dim=int(self.embed_dim * 2 ** i_layer),
                 input_resolution=(
                     patches_resolution[0] // (2 ** i_layer),
@@ -352,7 +353,8 @@ class SwinShogiModel(nn.Module):
                 norm_layer=self.norm_layer,
                 downsample=PatchMerging if (i_layer < self.num_layers - 1) else None
             )
-            self.layers.append(layer)
+            for i_layer, i in enumerate(range(self.num_layers))
+        }
         
         # 最終正規化層
         self.norm = self.norm_layer()
@@ -383,7 +385,7 @@ class SwinShogiModel(nn.Module):
         x = self.pos_drop(x, deterministic=deterministic)
         
         # Swin Transformer段階
-        for layer in self.layers:
+        for layer in self.layers.values():
             x = layer(x, deterministic=deterministic)
         
         # 最終正規化

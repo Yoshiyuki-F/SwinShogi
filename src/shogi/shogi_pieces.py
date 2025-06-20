@@ -5,6 +5,254 @@ from typing import List, Dict, Tuple, Set, Optional
 import re
 import hashlib
 
+# 定数定義：駒の種類
+EMPTY = 0
+PAWN_S = 1     # 先手の歩兵
+LANCE_S = 2    # 先手の香車
+KNIGHT_S = 3   # 先手の桂馬
+SILVER_S = 4   # 先手の銀将
+GOLD_S = 5     # 先手の金将
+BISHOP_S = 6   # 先手の角行
+ROOK_S = 7     # 先手の飛車
+KING_S = 8     # 先手の玉将
+
+PAWN_G = 9     # 後手の歩兵
+LANCE_G = 10   # 後手の香車
+KNIGHT_G = 11  # 後手の桂馬
+SILVER_G = 12  # 後手の銀将
+GOLD_G = 13    # 後手の金将
+BISHOP_G = 14  # 後手の角行
+ROOK_G = 15    # 後手の飛車
+KING_G = 16    # 後手の玉将
+
+# 成り駒
+PROMOTED_PAWN_S = 17   # 先手のと金
+PROMOTED_LANCE_S = 18  # 先手の成香
+PROMOTED_KNIGHT_S = 19 # 先手の成桂
+PROMOTED_SILVER_S = 20 # 先手の成銀
+PROMOTED_BISHOP_S = 21 # 先手の馬
+PROMOTED_ROOK_S = 22   # 先手の龍
+
+PROMOTED_PAWN_G = 23   # 後手のと金
+PROMOTED_LANCE_G = 24  # 後手の成香
+PROMOTED_KNIGHT_G = 25 # 後手の成桂
+PROMOTED_SILVER_G = 26 # 後手の成銀
+PROMOTED_BISHOP_G = 27 # 後手の馬
+PROMOTED_ROOK_G = 28   # 後手の龍
+
+# プレイヤー
+SENTE = 0  # 先手
+GOTE = 1   # 後手
+
+# 長距離移動可能な駒のリスト（香車、角行、飛車、馬、龍）
+long_move_pieces = [
+    LANCE_S, LANCE_G, BISHOP_S, BISHOP_G, ROOK_S, ROOK_G,
+    PROMOTED_BISHOP_S, PROMOTED_BISHOP_G, PROMOTED_ROOK_S, PROMOTED_ROOK_G
+]
+
+# 駒の移動方向を定義
+piece_moves = {
+    # 先手の駒
+    PAWN_S: [((-1, 0),)],  # 前に1マス
+    LANCE_S: [tuple((-i, 0) for i in range(1, 9))],  # 前に何マスでも
+    KNIGHT_S: [((-2, -1),), ((-2, 1),)],  # 桂馬の動き
+    SILVER_S: [((-1, -1),), ((-1, 0),), ((-1, 1),), ((1, -1),), ((1, 1),)],  # 銀の動き
+    GOLD_S: [((-1, -1),), ((-1, 0),), ((-1, 1),), ((0, -1),), ((0, 1),), ((1, 0),)],  # 金の動き
+    BISHOP_S: [tuple((-i, -i) for i in range(1, 9)), 
+               tuple((-i, i) for i in range(1, 9)), 
+               tuple((i, -i) for i in range(1, 9)), 
+               tuple((i, i) for i in range(1, 9))],  # 角の動き
+    ROOK_S: [tuple((0, -i) for i in range(1, 9)), 
+             tuple((0, i) for i in range(1, 9)), 
+             tuple((-i, 0) for i in range(1, 9)), 
+             tuple((i, 0) for i in range(1, 9))],  # 飛車の動き
+    KING_S: [((-1, -1),), ((-1, 0),), ((-1, 1),), ((0, -1),), ((0, 1),), ((1, -1),), ((1, 0),), ((1, 1),)],  # 玉の動き
+    
+    # 後手の駒
+    PAWN_G: [((1, 0),)],  # 前に1マス（後手）
+    LANCE_G: [tuple((i, 0) for i in range(1, 9))],  # 前に何マスでも（後手）
+    KNIGHT_G: [((2, -1),), ((2, 1),)],  # 桂馬の動き（後手）
+    SILVER_G: [((1, -1),), ((1, 0),), ((1, 1),), ((-1, -1),), ((-1, 1),)],  # 銀の動き（後手）
+    GOLD_G: [((1, -1),), ((1, 0),), ((1, 1),), ((0, -1),), ((0, 1),), ((-1, 0),)],  # 金の動き（後手）
+    BISHOP_G: [tuple((-i, -i) for i in range(1, 9)), 
+               tuple((-i, i) for i in range(1, 9)), 
+               tuple((i, -i) for i in range(1, 9)), 
+               tuple((i, i) for i in range(1, 9))],  # 角の動き（後手も同じ）
+    ROOK_G: [tuple((0, -i) for i in range(1, 9)), 
+             tuple((0, i) for i in range(1, 9)), 
+             tuple((-i, 0) for i in range(1, 9)), 
+             tuple((i, 0) for i in range(1, 9))],  # 飛車の動き（後手も同じ）
+    KING_G: [((-1, -1),), ((-1, 0),), ((-1, 1),), ((0, -1),), ((0, 1),), ((1, -1),), ((1, 0),), ((1, 1),)],  # 玉の動き
+    
+    # 成り駒（金と同じ動き）
+    PROMOTED_PAWN_S: [((-1, -1),), ((-1, 0),), ((-1, 1),), ((0, -1),), ((0, 1),), ((1, 0),)],
+    PROMOTED_LANCE_S: [((-1, -1),), ((-1, 0),), ((-1, 1),), ((0, -1),), ((0, 1),), ((1, 0),)],
+    PROMOTED_KNIGHT_S: [((-1, -1),), ((-1, 0),), ((-1, 1),), ((0, -1),), ((0, 1),), ((1, 0),)],
+    PROMOTED_SILVER_S: [((-1, -1),), ((-1, 0),), ((-1, 1),), ((0, -1),), ((0, 1),), ((1, 0),)],
+    
+    PROMOTED_PAWN_G: [((1, -1),), ((1, 0),), ((1, 1),), ((0, -1),), ((0, 1),), ((-1, 0),)],
+    PROMOTED_LANCE_G: [((1, -1),), ((1, 0),), ((1, 1),), ((0, -1),), ((0, 1),), ((-1, 0),)],
+    PROMOTED_KNIGHT_G: [((1, -1),), ((1, 0),), ((1, 1),), ((0, -1),), ((0, 1),), ((-1, 0),)],
+    PROMOTED_SILVER_G: [((1, -1),), ((1, 0),), ((1, 1),), ((0, -1),), ((0, 1),), ((-1, 0),)],
+    
+    # 馬（角＋玉の十字）
+    PROMOTED_BISHOP_S: [tuple((-i, -i) for i in range(1, 9)), 
+                        tuple((-i, i) for i in range(1, 9)), 
+                        tuple((i, -i) for i in range(1, 9)), 
+                        tuple((i, i) for i in range(1, 9)),
+                        ((-1, 0),), ((0, -1),), ((0, 1),), ((1, 0),)],
+    PROMOTED_BISHOP_G: [tuple((-i, -i) for i in range(1, 9)), 
+                        tuple((-i, i) for i in range(1, 9)), 
+                        tuple((i, -i) for i in range(1, 9)), 
+                        tuple((i, i) for i in range(1, 9)),
+                        ((-1, 0),), ((0, -1),), ((0, 1),), ((1, 0),)],
+                        
+    # 龍（飛車＋玉の斜め）
+    PROMOTED_ROOK_S: [tuple((0, -i) for i in range(1, 9)), 
+                      tuple((0, i) for i in range(1, 9)), 
+                      tuple((-i, 0) for i in range(1, 9)), 
+                      tuple((i, 0) for i in range(1, 9)),
+                      ((-1, -1),), ((-1, 1),), ((1, -1),), ((1, 1),)],
+    PROMOTED_ROOK_G: [tuple((0, -i) for i in range(1, 9)), 
+                      tuple((0, i) for i in range(1, 9)), 
+                      tuple((-i, 0) for i in range(1, 9)), 
+                      tuple((i, 0) for i in range(1, 9)),
+                      ((-1, -1),), ((-1, 1),), ((1, -1),), ((1, 1),)]
+}
+
+def get_piece_owner(piece_type: int) -> int:
+    """
+    駒の種類から所有者（先手/後手）を返す
+    
+    Args:
+        piece_type: 駒の種類
+        
+    Returns:
+        int: プレイヤー（0: 先手, 1: 後手）
+    """
+    if piece_type == EMPTY:
+        return -1
+    if piece_type <= KING_S or (PROMOTED_PAWN_S <= piece_type <= PROMOTED_ROOK_S):
+        return SENTE
+    return GOTE
+
+def can_promote(piece_type: int) -> bool:
+    """
+    駒が成れるかどうかを判定
+    
+    Args:
+        piece_type: 駒の種類
+        
+    Returns:
+        bool: 成れるかどうか
+    """
+    if piece_type == EMPTY:
+        return False
+    
+    # すでに成っている駒は成れない
+    if piece_type >= PROMOTED_PAWN_S:
+        return False
+    
+    # 金と玉は成れない
+    if piece_type == GOLD_S or piece_type == GOLD_G or piece_type == KING_S or piece_type == KING_G:
+        return False
+    
+    return True
+
+def is_promoted(piece_type: int) -> bool:
+    """
+    駒が成り駒かどうかを判定
+    
+    Args:
+        piece_type: 駒の種類
+        
+    Returns:
+        bool: 成り駒かどうか
+    """
+    return piece_type >= PROMOTED_PAWN_S
+
+def get_base_piece(piece_type: int) -> int:
+    """
+    成り駒の元の駒を返す
+    
+    Args:
+        piece_type: 駒の種類
+        
+    Returns:
+        int: 元の駒の種類
+    """
+    if not is_promoted(piece_type):
+        return piece_type
+    
+    # 成り駒から元の駒へのマッピング
+    if piece_type == PROMOTED_PAWN_S:
+        return PAWN_S
+    elif piece_type == PROMOTED_LANCE_S:
+        return LANCE_S
+    elif piece_type == PROMOTED_KNIGHT_S:
+        return KNIGHT_S
+    elif piece_type == PROMOTED_SILVER_S:
+        return SILVER_S
+    elif piece_type == PROMOTED_BISHOP_S:
+        return BISHOP_S
+    elif piece_type == PROMOTED_ROOK_S:
+        return ROOK_S
+    elif piece_type == PROMOTED_PAWN_G:
+        return PAWN_G
+    elif piece_type == PROMOTED_LANCE_G:
+        return LANCE_G
+    elif piece_type == PROMOTED_KNIGHT_G:
+        return KNIGHT_G
+    elif piece_type == PROMOTED_SILVER_G:
+        return SILVER_G
+    elif piece_type == PROMOTED_BISHOP_G:
+        return BISHOP_G
+    elif piece_type == PROMOTED_ROOK_G:
+        return ROOK_G
+    
+    return piece_type
+
+def promoted_piece(piece_type: int) -> int:
+    """
+    駒の成り駒を返す
+    
+    Args:
+        piece_type: 駒の種類
+        
+    Returns:
+        int: 成り駒の種類
+    """
+    if is_promoted(piece_type) or not can_promote(piece_type):
+        return piece_type
+    
+    # 駒から成り駒へのマッピング
+    if piece_type == PAWN_S:
+        return PROMOTED_PAWN_S
+    elif piece_type == LANCE_S:
+        return PROMOTED_LANCE_S
+    elif piece_type == KNIGHT_S:
+        return PROMOTED_KNIGHT_S
+    elif piece_type == SILVER_S:
+        return PROMOTED_SILVER_S
+    elif piece_type == BISHOP_S:
+        return PROMOTED_BISHOP_S
+    elif piece_type == ROOK_S:
+        return PROMOTED_ROOK_S
+    elif piece_type == PAWN_G:
+        return PROMOTED_PAWN_G
+    elif piece_type == LANCE_G:
+        return PROMOTED_LANCE_G
+    elif piece_type == KNIGHT_G:
+        return PROMOTED_KNIGHT_G
+    elif piece_type == SILVER_G:
+        return PROMOTED_SILVER_G
+    elif piece_type == BISHOP_G:
+        return PROMOTED_BISHOP_G
+    elif piece_type == ROOK_G:
+        return PROMOTED_ROOK_G
+    
+    return piece_type
+
 class ShogiPiece:
     """将棋の駒を表すクラス"""
     
