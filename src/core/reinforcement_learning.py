@@ -78,7 +78,7 @@ from src.shogi.board_encoder import encode_board, create_initial_board, visualiz
 from src.model.swin_shogi import SwinShogiModel
 from src.rl.mcts import MCTSConfig
 from src.rl.rl_config import RLConfig
-from config import PATHS
+from config.default_config import MCTS_CONFIG, MODEL_CONFIG, RL_CONFIG, PATHS
 
 # ロギング設定
 logger = logging.getLogger(__name__)
@@ -569,18 +569,6 @@ class SelfPlay:
         
         return np.array(all_states), np.array(all_actions), np.array(all_rewards)
 
-def default_mcts_config():
-    """MCTSConfigのデフォルト値を返す関数"""
-    return MCTSConfig(
-        simulation_times=1000,      # シミュレーション回数（100→1000に増加）
-        expansion_threshold=1,     # 展開閾値
-        gamma=1.0,                 # 割引率
-        uct_c=1.5,                 # UCTの探索パラメータ
-        dirichlet_alpha=0.3,       # ディリクレノイズのパラメータ
-        dirichlet_weight=0.25      # ディリクレノイズの重み
-    )
-
-
 def main():
     # シード固定
     key = jax.random.PRNGKey(42)
@@ -594,15 +582,15 @@ def main():
     visualize_board(initial_board)
     
     """
-    # モデルの初期化
+    # モデルの初期化 - MODEL_CONFIGから設定を読み込む
     model = SwinShogiModel(
-        embed_dim=128,              # 埋め込み次元を96→128に増加
-        depths=(3, 3),              # 層の深さを(2,2)→(3,3)に増加
-        num_heads=(8, 16),
-        window_size=3,
-        mlp_ratio=4.0,
-        drop_rate=0.0,              # dropout → drop_rate に修正
-        n_policy_outputs=2187       # policy_dim → n_policy_outputs に修正
+        embed_dim=MODEL_CONFIG['embed_dim'],
+        depths=MODEL_CONFIG['depths'],
+        num_heads=MODEL_CONFIG['num_heads'],
+        window_size=MODEL_CONFIG['window_size'],
+        mlp_ratio=MODEL_CONFIG['mlp_ratio'],
+        drop_rate=MODEL_CONFIG['dropout'],
+        n_policy_outputs=MODEL_CONFIG['policy_dim']
     )
     # 初期盤面を作成（モデル初期化用）
     features = encode_board(create_initial_board())
@@ -615,13 +603,22 @@ def main():
     params = model.init(key, features)
     """
 
-    # 強化学習の設定
-    from src.rl.rl_config import MCTSConfig as MCTSConfigNew
+    # 強化学習の設定 - MCTS_CONFIGから設定を読み込む
     from src.rl.mcts import MCTSConfig
     
     # デフォルト設定を使用
-    mcts_config = default_mcts_config()
-
+    mcts_config = MCTSConfig(
+        simulation_times=MCTS_CONFIG['simulation_times'],
+        expansion_threshold=MCTS_CONFIG['expansion_threshold'],
+        gamma=MCTS_CONFIG['gamma'],
+        uct_c=MCTS_CONFIG['uct_c'],
+        dirichlet_alpha=MCTS_CONFIG['dirichlet_alpha'],
+        dirichlet_weight=MCTS_CONFIG['dirichlet_weight']
+    )
+    
+    print(f"\nMCTS設定:")
+    for key, value in MCTS_CONFIG.items():
+        print(f"  {key}: {value}")
 
 if __name__ == "__main__":
     main() 

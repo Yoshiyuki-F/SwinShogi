@@ -19,6 +19,7 @@ from collections import defaultdict
 # プロジェクトのルートディレクトリをPythonパスに追加
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 
+from config.default_config import MCTS_CONFIG
 from src.shogi.shogi_pieces import (
     EMPTY, PAWN_S, LANCE_S, KNIGHT_S, SILVER_S, GOLD_S, BISHOP_S, ROOK_S, KING_S,
     PAWN_G, LANCE_G, KNIGHT_G, SILVER_G, GOLD_G, BISHOP_G, ROOK_G, KING_G,
@@ -31,19 +32,19 @@ from src.shogi.board_encoder import encode_board, visualize_board
 @dataclass
 class DiscreteActionConfig:
     """離散行動空間の基本設定"""
-    action_num: int = 2187  # 行動空間の次元数（9x9の盤面 + 持ち駒の打ち先）
+    action_num: int = MCTS_CONFIG['action_num']  # 行動空間の次元数（9x9の盤面 + 持ち駒の打ち先）
 
 
 @dataclass
 class MCTSConfig(DiscreteActionConfig):
     """MCTSのハイパーパラメータ設定"""
-    simulation_times: int = 100     # 1回の探索で実行するシミュレーション回数
-    expansion_threshold: int = 1     # ノードを展開する訪問回数の閾値
-    gamma: float = 1.0               # 割引率
-    uct_c: float = 1.5               # UCTの探索パラメータ
-    dirichlet_alpha: float = 0.3     # ディリクレノイズのパラメータ
-    dirichlet_weight: float = 0.25   # ディリクレノイズの重み
-    value_weight: float = 0.5        # 価値と方策の重み付け（0.5で均等）
+    simulation_times: int = MCTS_CONFIG['simulation_times']     # 1回の探索で実行するシミュレーション回数
+    expansion_threshold: int = MCTS_CONFIG['expansion_threshold']     # ノードを展開する訪問回数の閾値
+    gamma: float = MCTS_CONFIG['gamma']               # 割引率
+    uct_c: float = MCTS_CONFIG['uct_c']               # UCTの探索パラメータ
+    dirichlet_alpha: float = MCTS_CONFIG['dirichlet_alpha']     # ディリクレノイズのパラメータ
+    dirichlet_weight: float = MCTS_CONFIG['dirichlet_weight']   # ディリクレノイズの重み
+    value_weight: float = MCTS_CONFIG['value_weight']        # 価値と方策の重み付け（0.5で均等）
 
 
 class RLParameter:
@@ -224,8 +225,9 @@ class RLTrainer:
 class MCTS:
     """モンテカルロ木探索アルゴリズムの実装"""
     
-    def __init__(self, game, actor_critic, c_puct=1.0, n_simulations=400, dirichlet_alpha=0.3, 
-                exploration_fraction=0.25, pb_c_init=1.25, pb_c_base=19652):
+    def __init__(self, game, actor_critic, c_puct=MCTS_CONFIG['uct_c'], n_simulations=MCTS_CONFIG['n_simulations'], 
+                dirichlet_alpha=MCTS_CONFIG['dirichlet_alpha'], exploration_fraction=MCTS_CONFIG['exploration_fraction'], 
+                pb_c_init=MCTS_CONFIG['pb_c_init'], pb_c_base=MCTS_CONFIG['pb_c_base']):
         """
         MCTSの初期化
         
@@ -459,19 +461,20 @@ class MCTSTrainer(RLTrainer):
 def test_mcts():
     """MCTSのテスト"""
     from model.swin_shogi import SwinShogiModel
+    from config.default_config import MODEL_CONFIG
     
     # シード固定
     key = jax.random.PRNGKey(42)
     
     # モデルの初期化
     model = SwinShogiModel(
-        embed_dim=96,
-        depths=(2, 2),
-        num_heads=(8, 16),
-        window_size=3,
-        mlp_ratio=4.0,
-        dropout=0.0,
-        policy_dim=2187
+        embed_dim=MODEL_CONFIG['embed_dim'],
+        depths=MODEL_CONFIG['depths'],
+        num_heads=MODEL_CONFIG['num_heads'],
+        window_size=MODEL_CONFIG['window_size'],
+        mlp_ratio=MODEL_CONFIG['mlp_ratio'],
+        dropout=MODEL_CONFIG['dropout'],
+        policy_dim=MODEL_CONFIG['policy_dim']
     )
     
     # 初期盤面を作成
@@ -486,14 +489,9 @@ def test_mcts():
     # パラメータ初期化
     params = model.init(key, features)
     
-    # MCTSの設定
+    # MCTSの設定（テスト用に一部パラメータをオーバーライド）
     config = MCTSConfig(
-        simulation_times=10,      # シミュレーション回数
-        expansion_threshold=1,    # 展開閾値
-        gamma=1.0,                # 割引率
-        uct_c=1.5,                # UCTの探索パラメータ
-        dirichlet_alpha=0.3,      # ディリクレノイズのパラメータ
-        dirichlet_weight=0.25     # ディリクレノイズの重み
+        simulation_times=10       # テスト用にシミュレーション回数を少なくする
     )
     
     # MCTSを初期化

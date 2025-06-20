@@ -31,7 +31,13 @@ MCTS_CONFIG = {
     'gamma': 1.0,
     'uct_c': 1.5,
     'dirichlet_alpha': 0.3,
-    'dirichlet_weight': 0.25
+    'dirichlet_weight': 0.25,
+    'value_weight': 0.5,
+    'action_num': 2187,
+    'n_simulations': 400,
+    'exploration_fraction': 0.25,
+    'pb_c_init': 1.25,
+    'pb_c_base': 19652
 }
 
 # USI設定
