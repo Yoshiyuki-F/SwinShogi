@@ -3,8 +3,6 @@
 SwinShogi - 将棋AIエンジン
 """
 import argparse
-import os
-import sys
 
 def main():
     """SwinShogiのメインエントリーポイント"""

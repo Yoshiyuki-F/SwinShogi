@@ -5,10 +5,8 @@ USIプロトコルインターフェース
 import sys
 import os
 import time
-import re
 import jax
-import jax.numpy as jnp
-from pathlib import Path
+
 
 # プロジェクトのルートディレクトリをPythonパスに追加
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))

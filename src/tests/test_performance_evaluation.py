@@ -7,8 +7,7 @@ import unittest
 import time
 import jax
 import jax.numpy as jnp
-import numpy as np
-from src.model.swin_shogi import SwinShogiModel, create_swin_shogi_model, inference_jit
+from src.model.swin_shogi import create_swin_shogi_model
 from src.utils.performance import benchmark_inference, profile_mcts
 from src.rl.mcts import MCTS
 from src.core.reinforcement_learning import ActorCritic

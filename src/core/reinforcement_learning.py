@@ -10,7 +10,6 @@ import sys
 import time
 import flax
 import numpy as np
-from typing import Dict, Tuple, List, Any, Optional, Callable
 from pathlib import Path
 import logging
 
@@ -79,10 +78,6 @@ from src.shogi.board_encoder import encode_board, create_initial_board, visualiz
 from src.model.swin_shogi import SwinShogiModel
 from src.rl.mcts import MCTSConfig
 from src.rl.rl_config import RLConfig
-# 削除: ShogiRLは使用しないためインポートを削除
-# from src.rl.shogi_rl import ShogiRL
-# 削除: model_utilsモジュールは存在しないためインポートを削除
-# from src.utils.model_utils import save_params, load_params
 from config import PATHS
 
 # ロギング設定
@@ -624,12 +619,8 @@ def main():
     from src.rl.rl_config import MCTSConfig as MCTSConfigNew
     from src.rl.mcts import MCTSConfig
     
-    # 設定を初期化
-    mcts_config = MCTSConfig(
-        simulation_times=500,   # シミュレーション回数を10→500に増加
-        expansion_threshold=1,
-        uct_c=1.5
-    )
+    # デフォルト設定を使用
+    mcts_config = default_mcts_config()
 
 
 if __name__ == "__main__":

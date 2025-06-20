@@ -11,7 +11,6 @@ import jax
 import jax.numpy as jnp
 import os
 import sys
-import copy
 import time
 from dataclasses import dataclass
 from typing import Dict, List, Tuple, Optional, Any

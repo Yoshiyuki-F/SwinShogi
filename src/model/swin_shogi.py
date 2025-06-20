@@ -7,8 +7,7 @@ import jax.numpy as jnp
 import numpy as np
 import flax
 import flax.linen as nn
-from flax.training import checkpoints
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union, Sequence
+from typing import Callable, Optional, Tuple
 import time
 
 class MLP(nn.Module):
