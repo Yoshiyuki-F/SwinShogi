@@ -11,9 +11,9 @@ SwinShogiテストパッケージ
 - interface: インターフェース関連のテスト
 """
 
-from .test_swin_shogi import TestSwinShogi
-from .test_shogi_rules import TestShogiRules
-from .test_performance_evaluation import TestPerformanceEvaluation, TestJAXOptimizations
+from .model.test_swin_shogi import TestSwinShogi
+from .shogi.test_shogi_rules import TestShogiRules
+from .utils.test_performance_evaluation import TestPerformanceEvaluation, TestJAXOptimizations
 
 __all__ = [
     'TestSwinShogi',
