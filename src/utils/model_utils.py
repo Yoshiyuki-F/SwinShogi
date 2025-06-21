@@ -41,6 +41,54 @@ def inference_jit(model, params, inputs, feature_vector):
     
     return _inference(params, inputs, feature_vector)
 
+def calculate_gradient_norm(grads):
+    """
+    勾配のグローバルノルムを計算する
+    
+    Args:
+        grads: パラメータ勾配のtree構造
+    
+    Returns:
+        float: 勾配のグローバルノルム
+    """
+    flat_grads = jax.tree_leaves(grads)
+    return jnp.sqrt(jnp.sum(jnp.array([jnp.sum(jnp.square(g)) for g in flat_grads])))
+
+def clip_gradients(grads, max_norm):
+    """
+    勾配のクリッピングを行う
+    
+    Args:
+        grads: パラメータ勾配のtree構造
+        max_norm: クリッピングの最大値
+    
+    Returns:
+        クリッピングされた勾配のtree構造
+    """
+    return jax.tree_map(
+        lambda g: jnp.clip(g, -max_norm, max_norm),
+        grads
+    )
+
+def process_gradients(grads, max_norm):
+    """
+    勾配の計算とクリッピングを行う
+    
+    Args:
+        grads: モデルの勾配
+        max_norm: 勾配クリッピングの最大ノルム
+    
+    Returns:
+        (clipped_grads, global_norm): クリッピングされた勾配とそのグローバルノルム
+    """
+    # 勾配のノルムを計算
+    global_norm = calculate_gradient_norm(grads)
+    
+    # 勾配クリッピング
+    clipped_grads = clip_gradients(grads, max_norm)
+    
+    return clipped_grads, global_norm
+
 class PolicyGradientLoss:
     """
     方策勾配損失関数

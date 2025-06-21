@@ -9,9 +9,9 @@ import flax.linen as nn
 MODEL_CONFIG = {
     'img_size': (9, 9),             # 将棋盤のサイズ
     'patch_size': (1, 1),           # パッチサイズ
-    'in_chans': 119,                # 入力チャネル数（駒の種類、位置、持ち駒など）
+    'in_chans': 2,                  # 入力チャネル数（駒の種類とプレイヤー）
     'embed_dim': 96,                # 埋め込み次元
-    'depths': (2, 2),               # 各段階の層の深さ
+    'depths': (3, 3),               # 各段階の層の深さ
     'num_heads': (3, 6),            # 各段階のヘッド数
     'window_size': 3,               # 注意機構のウィンドウサイズ
     'mlp_ratio': 4.0,               # MLPの拡大率
@@ -31,7 +31,8 @@ MODEL_CONFIG = {
     'drop': 0.0,                    # 一般的なドロップアウト率
     'drop_path': 0.0,               # パスドロップ率（個別ブロック用）
     'input_resolution': (9, 9),     # 入力解像度
-    'patch_merge_factor': 3         # パッチ結合の分割係数（通常のSwinは2、このSwinは3）
+    'patch_merge_factor': 3,        # パッチ結合の分割係数（通常のSwinは2、このSwinは3）
+    'feature_dim': 15               # 特徴ベクトル（手番と持ち駒）の次元
 }
 
 # 強化学習設定
@@ -113,6 +114,7 @@ class ModelConfig:
     drop_path: float = MODEL_CONFIG['drop_path']
     input_resolution: Tuple[int, int] = MODEL_CONFIG['input_resolution']
     patch_merge_factor: int = MODEL_CONFIG['patch_merge_factor']
+    feature_dim: int = MODEL_CONFIG['feature_dim']
 
 # データクラス定義（rl_config.pyからマージ）
 

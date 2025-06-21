@@ -8,7 +8,7 @@ import os
 import flax
 import logging
 from pathlib import Path
-from src.utils.model_utils import PolicyGradientLoss
+from src.utils.model_utils import PolicyGradientLoss, process_gradients
 
 # ロギング設定
 logger = logging.getLogger(__name__)
@@ -140,18 +140,11 @@ class Trainer:
         grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
         (total_loss, (policy_loss, value_loss, entropy_loss)), grads = grad_fn(params)
         
-        # 勾配のノルムを計算
-        flat_grads = jax.tree_leaves(grads)
-        global_norm = jnp.sqrt(jnp.sum(jnp.array([jnp.sum(jnp.square(g)) for g in flat_grads])))
-        
-        # 勾配クリッピング
-        grads = jax.tree_map(
-            lambda g: jnp.clip(g, -self.max_grad_norm, self.max_grad_norm),
-            grads
-        )
+        # 勾配の処理（ノルム計算とクリッピング）
+        clipped_grads, global_norm = process_gradients(grads, self.max_grad_norm)
         
         # パラメータの更新
-        updates, new_optimizer_state = self.optimizer.update(grads, optimizer_state, params)
+        updates, new_optimizer_state = self.optimizer.update(clipped_grads, optimizer_state, params)
         new_params = flax.optim.apply_updates(params, updates)
         
         # 損失値を辞書に格納
