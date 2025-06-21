@@ -50,8 +50,13 @@ SwinShogi/
     - model/      # Swin Transformerモデル
     - rl/         # 強化学習アルゴリズム
     - shogi/      # 将棋ルール
-    - tests/      # テストコード
+    - tests/      # 内部テストコード
     - utils/      # ユーティリティ
+  - tests/        # 外部テストコード
+    - model/      # モデルテスト
+    - rl/         # 強化学習テスト
+    - shogi/      # 将棋ルールテスト
+    - utils/      # ユーティリティテスト
 ```
 
 ## モジュール構成
@@ -127,11 +132,12 @@ SwinShogi/
 - **usi.py**: USIプロトコル実装
   - `USIInterface`: USIコマンド処理とエンジン通信
 
-### テスト (src/tests/)
+### テスト (tests/)
 
-- **test_swin_shogi.py**: SwinShogiモデルのテスト
-- **test_shogi_rules.py**: 将棋ルール実装のテスト
-- **test_performance_evaluation.py**: パフォーマンス評価
+- **model/test_swin_shogi.py**: SwinShogiモデルのテスト
+- **rl/test_mcts.py**: モンテカルロ木探索のテスト
+- **shogi/test_shogi_rules.py**: 将棋ルール実装のテスト
+- **utils/test_performance_evaluation.py**: パフォーマンス評価
 
 ## 実装内容
 
@@ -164,8 +170,17 @@ SwinShogi/
    - 詰み判定
    - 千日手検出
 
+7. **テスト体制の整備**
+   - 標準的なPythonテスト構造（`tests/`ディレクトリ）への移行
+   - ユニットテストの拡充（MCTSテスト、モデルテスト）
+   - 統合テストスクリプトの作成（`scripts/run_integration_test.sh`）
+   - シーケンス図に沿った連携テストの実装
+
 ## 最近の更新内容
 
+- **テストコードの改善**: MCTSテストを標準的なユニットテスト形式に変更し、`tests/`ディレクトリに移動
+- **統合テストの強化**: Transformer、Actor-Critic、MCTSの連携を確認する統合テストを実装
+- **モデル特徴抽出の改良**: SwinShogiモデルの特徴抽出機能を強化し、Actor-Criticとの連携を改善
 - **損失関数の整理**: `PolicyGradientLoss`クラス内の重複を排除し、`policy_loss`関数を柔軟化
 - **勾配処理の改善**: 勾配計算とクリッピングのロジックを整理し、再利用性を向上
 - **コード構造の最適化**: 関連する機能を論理的にグループ化し、保守性を向上
