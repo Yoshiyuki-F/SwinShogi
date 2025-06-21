@@ -2,11 +2,9 @@
 将棋用のSwin Transformerモデル実装
 """
 import os
-import jax
 import jax.numpy as jnp
 import numpy as np
 import flax
-import time
 from config.default_config import get_model_config, ModelConfig
 from src.model.swin_transformer import (
     PatchEmbed, BasicLayer, PatchMerging
@@ -95,15 +93,22 @@ class SwinShogiModel(flax.linen.Module):
             flax.linen.tanh
         ])
     
-    def __call__(self, x, deterministic: bool = True):
+    def __call__(self, x, feature_vector, deterministic: bool = True):
         # パッチ埋め込み
-        x = self.patch_embed(x)
-        B, H, W, C = x.shape
-        x = x.reshape(B, H * W, C)
+        x = self.patch_embed(x, feature_vector=feature_vector, deterministic=deterministic)
         
-        # 位置埋め込みの追加
-        x = x + self.absolute_pos_embed
-        x = self.pos_drop(x, deterministic=deterministic)
+        B, L, C = x.shape
+        
+        # 先頭の特徴トークンを分離
+        feature_token = x[:, :1]  # (B, 1, C)
+        patch_tokens = x[:, 1:]   # (B, L-1, C)
+        
+        # パッチのみに位置埋め込みを適用
+        patch_tokens = patch_tokens + self.absolute_pos_embed
+        patch_tokens = self.pos_drop(patch_tokens, deterministic=deterministic)
+        
+        # 再結合
+        x = jnp.concatenate([feature_token, patch_tokens], axis=1)
         
         # 現在の解像度を計算
         config = self.model_config
@@ -114,11 +119,14 @@ class SwinShogiModel(flax.linen.Module):
         
         # Swin Transformer段階
         for layer in self.layers.values():
-            x, current_resolution = layer(x, current_resolution=current_resolution, deterministic=deterministic)
+            x, current_resolution = layer(x, current_resolution=current_resolution, 
+                                        deterministic=deterministic)
         
         # 最終正規化
         x = self.norm(x)
-        x = jnp.mean(x, axis=1)  # グローバル平均プーリング
+        
+        # 特徴トークンを使用して予測
+        x = x[:, 0]  # 先頭の特徴トークンのみ使用 (ViTのCLSトークンと同様)
         
         # ヘッド
         policy_logits = self.policy_head(x)
@@ -137,72 +145,27 @@ class SwinShogiModel(flax.linen.Module):
         with open(path, 'rb') as f:
             loaded_params = flax.serialization.from_bytes(params, f.read())
         return loaded_params
-    
-    @staticmethod
-    def cross_entropy_loss(logits, targets):
-        """交差エントロピー損失関数"""
-        return -jnp.sum(targets * jax.nn.log_softmax(logits)) / targets.shape[0]
-    
-    @staticmethod
-    @jax.jit
-    def policy_gradient_loss(params, model_apply_fn, inputs, targets):
-        """方策勾配損失関数（JIT最適化）"""
-        policy_logits, _ = model_apply_fn(params, inputs)
-        return SwinShogiModel.cross_entropy_loss(policy_logits, targets)
+
 
 def create_swin_shogi_model(rng, model_config=None, batch_size=1):
     """SwinShogiモデルの作成"""
+    from config.default_config import get_model_config
+    
     if model_config is None:
         model_config = get_model_config()
     
     model = SwinShogiModel(model_config=model_config)
+    
+    # モデルパラメータを初期化（盤面入力と特徴ベクトルを使用）
     input_shape = (batch_size, model_config.img_size[0], model_config.img_size[1], model_config.in_chans)
-    params = model.init(rng, jnp.ones(input_shape))
-    return model, params
+    feature_shape = (batch_size, model_config.feature_dim)  # 手番と持ち駒の特徴ベクトル
+    
+    # 特徴ベクトルを含むモデルの初期化
+    params = model.init(rng, jnp.ones(input_shape), feature_vector=jnp.ones(feature_shape))
+    
+    return model, params 
 
-def inference_jit(model, params, inputs):
-    """推論関数（JIT最適化）"""
-    @jax.jit
-    def _inference(params, inputs):
-        return model.apply(params, inputs)
-    
-    return _inference(params, inputs)
 
-def test_swin_shogi_model():
-    """モデルのテスト関数"""
-    # モデルの初期化
-    rng = jax.random.PRNGKey(0)
-    model, params = create_swin_shogi_model(rng)
-    
-    # テスト入力
-    test_input = jnp.ones((1, 9, 9, 119))
-    
-    # 推論テスト
-    start_time = time.time()
-    policy_logits, value = model.apply(params, test_input)
-    end_time = time.time()
-    
-    print(f"モデル推論所要時間: {(end_time - start_time) * 1000:.2f}ms")
-    print(f"方策出力形状: {policy_logits.shape}")
-    print(f"価値出力形状: {value.shape}")
-    
-    # JIT最適化テスト
-    start_time = time.time()
-    policy_logits_jit, value_jit = inference_jit(model, params, test_input)
-    end_time = time.time()
-    
-    print(f"JIT最適化後の推論所要時間: {(end_time - start_time) * 1000:.2f}ms")
-    
-    # パラメータの保存と読み込みテスト
-    test_save_path = "/tmp/swin_shogi_test_params.pkl"
-    model.save_params(test_save_path, params)
-    loaded_params = model.load_params(test_save_path, params)
-    
-    # 同一性確認
-    equal = all(jnp.array_equal(p1, p2) for p1, p2 in zip(jax.tree.leaves(params), jax.tree.leaves(loaded_params)))
-    print(f"パラメータの保存と読み込みテスト: {'成功' if equal else '失敗'}")
-    
-    return True
-
-if __name__ == "__main__":
-    test_swin_shogi_model() 
+# モデルの作成・推論関連の関数はsrc/utils/model_utils.pyに移動しました
+# テスト関数はsrc/tests/test_swin_shogi.pyに移動しました
+# from src.utils.model_utils import  predict, inference_jit, cross_entropy_loss, policy_gradient_loss

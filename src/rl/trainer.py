@@ -8,6 +8,7 @@ import os
 import flax
 import logging
 from pathlib import Path
+from src.utils.model_utils import predict, inference_jit, cross_entropy_loss, policy_gradient_loss
 
 # ロギング設定
 logger = logging.getLogger(__name__)
@@ -311,4 +312,18 @@ class Trainer:
             return True
         except Exception as e:
             logger.error(f"モデル読み込みエラー: {e}")
-            return False 
+            return False
+
+# 訓練と推論関連の基本機能はsrc/utils/model_utils.pyに集約されています
+
+if __name__ == "__main__":
+    # テスト実行コード - 実際のトレーニング開始スクリプトは別途作成します
+    import argparse
+    
+    parser = argparse.ArgumentParser(description="将棋強化学習トレーナー")
+    parser.add_argument("--resume", type=str, help="トレーニング再開用のモデルパス")
+    parser.add_argument("--lr", type=float, default=0.001, help="学習率")
+    args = parser.parse_args()
+    
+    logging.basicConfig(level=logging.INFO)
+    logger.info("トレーニングスクリプトのテスト実行") 
