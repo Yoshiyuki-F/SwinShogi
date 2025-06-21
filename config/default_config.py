@@ -19,15 +19,11 @@ MODEL_CONFIG = {
     'drop_rate': 0.0,               # ドロップアウト率
     'attn_drop_rate': 0.0,          # 注意機構のドロップアウト率
     'drop_path_rate': 0.1,          # パスドロップ率
-    'norm_layer': nn.LayerNorm,     # 正規化層
     'patch_norm': True,             # パッチ正規化を行うかどうか
     'n_policy_outputs': 9*9*27,     # 政策出力（移動元×移動先×駒の種類）
     'use_checkpoint': False,        # チェックポイントを使用するかどうか
     'shift_size': 0,                # シフトサイズ（SW-MSA用）
     'downsample': None,             # ダウンサンプリング関数
-    # 'default_img_size': (224, 224), # デフォルト画像サイズ（標準的なSwin Transformer用）
-    # 'default_patch_size': (4, 4),   # デフォルトパッチサイズ（標準的なSwin Transformer用）
-    # 'default_in_chans': 3,          # デフォルト入力チャネル数（標準的なSwin Transformer用）
     'drop': 0.0,                    # 一般的なドロップアウト率
     'drop_path': 0.0,               # パスドロップ率（個別ブロック用）
     'input_resolution': (9, 9),     # 入力解像度
@@ -55,7 +51,7 @@ MCTS_CONFIG = {
     'dirichlet_alpha': 0.3,
     'dirichlet_weight': 0.25,
     'value_weight': 0.5,
-    'action_num': 2187,
+    'action_num': 2187, #TODO really?
     'n_simulations': 400,
     'exploration_fraction': 0.25,
     'pb_c_init': 1.25,

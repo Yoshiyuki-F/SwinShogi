@@ -35,18 +35,12 @@ class MCTSConfig(DiscreteActionConfig):
     dirichlet_weight: float = MCTS_CONFIG['dirichlet_weight']   # ディリクレノイズの重み
     value_weight: float = MCTS_CONFIG['value_weight']        # 価値と方策の重み付け（0.5で均等）
 
-
-class RLParameter:
-    """強化学習パラメータの基底クラス"""
-    def __init__(self, config=None):
-        self.config = config
         
 
-class MCTSParameter(RLParameter):
+class MCTSParameter:
     """MCTSの訪問回数と累積報酬を管理するクラス"""
     
-    def __init__(self, config=None):
-        super().__init__(config)
+    def __init__(self):
         self.N = {}  # 訪問回数 {state_key: [action_0_count, action_1_count, ...]}
         self.W = {}  # 累積報酬 {state_key: [action_0_reward, action_1_reward, ...]}
         self.Q = {}  # 平均報酬 {state_key: [action_0_value, action_1_value, ...]}
@@ -197,18 +191,6 @@ class MCTSNode:
         """
         self.visit_count += 1
         self.value_sum += value
-
-
-class RLTrainer:
-    """強化学習のトレーナー基底クラス"""
-    def __init__(self, parameter, remote_memory=None):
-        self.parameter = parameter
-        self.remote_memory = remote_memory
-        self.train_count = 0
-        
-    def train(self):
-        """モデルを訓練する"""
-        raise NotImplementedError("サブクラスで実装する必要があります")
 
 
 class MCTS:
@@ -452,9 +434,17 @@ class MCTS:
             child.prior = (1 - self.exploration_fraction) * child.prior + self.exploration_fraction * noise[i]
 
 
-class MCTSTrainer(RLTrainer):
-    """MCTSを使った強化学習トレーナー"""
-    
+
+
+class MCTSTrainer:
+    """強化学習のトレーナー基底クラス"""
+    #TODO trainer.py
+
+    def __init__(self, parameter, remote_memory=None):
+        self.parameter = parameter
+        self.remote_memory = remote_memory
+        self.train_count = 0
+
     def train(self):
-        """モデルを訓練する（実装はサブクラスで）"""
-        pass 
+        """モデルを訓練する"""
+        raise NotImplementedError("サブクラスで実装する必要があります")
