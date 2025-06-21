@@ -25,9 +25,9 @@ MODEL_CONFIG = {
     'use_checkpoint': False,        # チェックポイントを使用するかどうか
     'shift_size': 0,                # シフトサイズ（SW-MSA用）
     'downsample': None,             # ダウンサンプリング関数
-    'default_img_size': (224, 224), # デフォルト画像サイズ（標準的なSwin Transformer用）
-    'default_patch_size': (4, 4),   # デフォルトパッチサイズ（標準的なSwin Transformer用）
-    'default_in_chans': 3,          # デフォルト入力チャネル数（標準的なSwin Transformer用）
+    # 'default_img_size': (224, 224), # デフォルト画像サイズ（標準的なSwin Transformer用）
+    # 'default_patch_size': (4, 4),   # デフォルトパッチサイズ（標準的なSwin Transformer用）
+    # 'default_in_chans': 3,          # デフォルト入力チャネル数（標準的なSwin Transformer用）
     'drop': 0.0,                    # 一般的なドロップアウト率
     'drop_path': 0.0,               # パスドロップ率（個別ブロック用）
     'input_resolution': (9, 9),     # 入力解像度

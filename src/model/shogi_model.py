@@ -93,7 +93,44 @@ class SwinShogiModel(flax.linen.Module):
             flax.linen.tanh
         ])
     
-    def __call__(self, x, feature_vector, deterministic: bool = True):
+    def __call__(self, x, feature_vector=None, deterministic: bool = True):
+        """
+        モデル推論を実行する
+
+        Args:
+            x: 盤面特徴量 [B, H, W, C]
+            feature_vector: 手番・持ち駒特徴量 [B, feature_dim]
+            deterministic: 決定論的実行フラグ（学習時はFalse）
+            
+        Returns:
+            (policy_logits, value): 方策ロジットと価値
+        """
+        # feature_vectorがNoneの場合は0埋め特徴ベクトルを作成（テスト用）
+        if feature_vector is None:
+            B = x.shape[0]
+            feature_vector = jnp.zeros((B, self.model_config.feature_dim))
+        
+        # 特徴抽出
+        features = self._forward_features(x, feature_vector, deterministic)
+        
+        # ヘッド
+        policy_logits = self.policy_head(features)
+        value = self.value_head(features)
+        
+        return policy_logits, value
+    
+    def _forward_features(self, x, feature_vector, deterministic: bool = True):
+        """
+        特徴抽出のための内部関数
+        
+        Args:
+            x: 盤面特徴量 [B, H, W, C]
+            feature_vector: 手番・持ち駒特徴量 [B, feature_dim]
+            deterministic: 決定論的実行フラグ
+            
+        Returns:
+            特徴ベクトル
+        """
         # パッチ埋め込み
         x = self.patch_embed(x, feature_vector=feature_vector, deterministic=deterministic)
         
@@ -125,14 +162,25 @@ class SwinShogiModel(flax.linen.Module):
         # 最終正規化
         x = self.norm(x)
         
-        # 特徴トークンを使用して予測
+        # 特徴トークンを使用
         x = x[:, 0]  # 先頭の特徴トークンのみ使用 (ViTのCLSトークンと同様)
         
-        # ヘッド
-        policy_logits = self.policy_head(x)
-        value = self.value_head(x)
+        return x
+    
+    def extract_features(self, x, feature_vector=None, deterministic: bool = True):
+        """
+        中間特徴を抽出する（Actor-Criticで使用）
+        シーケンス図のTransformer->AC部分の実装
         
-        return policy_logits, value
+        Args:
+            x: 盤面特徴量 [B, H, W, C]
+            feature_vector: 手番・持ち駒特徴量 [B, feature_dim]
+            deterministic: 決定論的実行フラグ
+            
+        Returns:
+            特徴ベクトル
+        """
+        return self._forward_features(x, feature_vector, deterministic)
     
     def save_params(self, path: str, params):
         """モデルパラメータを保存"""

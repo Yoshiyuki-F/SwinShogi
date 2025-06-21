@@ -12,6 +12,32 @@ SwinShogiは、Swin Transformerを使用した将棋AIシステムです。強�
 - 自己対局と外部エンジン対戦による評価システム
 - 将棋の完全なルール実装（打ち歩詰め禁止、王手判定、詰み判定、千日手検出など）
 
+## システムアーキテクチャ
+
+以下の図はSwinShogiの主要コンポーネント間の連携シーケンスを示しています：
+
+```mermaid
+sequenceDiagram
+    participant 盤面状態
+    participant Transformer as Swin Transformer
+    participant AC as Actor-Critic
+    participant MCTS
+    participant 最適手選択
+    
+    盤面状態->>Transformer: 盤面特徴を入力
+    Transformer->>AC: 特徴表現を出力
+    AC->>MCTS: 方策(π)と価値(v)を予測
+    loop 探索ループ
+        MCTS->>MCTS: ノード選択
+        MCTS->>AC: 新ノードの評価要求
+        AC->>Transformer: 特徴抽出要求
+        Transformer->>AC: 特徴表現
+        AC->>MCTS: 方策と価値を返却
+        MCTS->>MCTS: バックプロパゲーション
+    end
+    MCTS->>最適手選択: 訪問回数に基づく確率分布
+```
+
 ## プロジェクト構成
 
 ```

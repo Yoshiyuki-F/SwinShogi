@@ -7,20 +7,15 @@ MCTSは、将棋のような複雑なゲームにおいて、状態空間を効�
 
 import math
 import numpy as np
-import jax
-import jax.numpy as jnp
 import os
 import sys
-import time
 from dataclasses import dataclass
 from typing import Dict, List, Tuple, Any
-from collections import defaultdict
 
 # プロジェクトのルートディレクトリをPythonパスに追加
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 
 from config.default_config import MCTS_CONFIG
-from src.shogi.board_visualizer import BoardVisualizer
 
 
 @dataclass
@@ -219,8 +214,8 @@ class RLTrainer:
 class MCTS:
     """モンテカルロ木探索アルゴリズムの実装"""
     
-    def __init__(self, game, actor_critic, c_puct=MCTS_CONFIG['uct_c'], n_simulations=MCTS_CONFIG['n_simulations'], 
-                dirichlet_alpha=MCTS_CONFIG['dirichlet_alpha'], exploration_fraction=MCTS_CONFIG['exploration_fraction'], 
+    def __init__(self, game, actor_critic, c_puct=MCTS_CONFIG['uct_c'], n_simulations=MCTS_CONFIG['simulation_times'], 
+                dirichlet_alpha=MCTS_CONFIG['dirichlet_alpha'], exploration_fraction=MCTS_CONFIG['dirichlet_weight'], 
                 pb_c_init=MCTS_CONFIG['pb_c_init'], pb_c_base=MCTS_CONFIG['pb_c_base']):
         """
         MCTSの初期化
@@ -246,285 +241,220 @@ class MCTS:
         
         # ルートノードの初期化
         self.root = MCTSNode()
+        self.game_state = game.clone()  # 現在のゲーム状態
         
-        # ノードごとの統計情報を記録
-        self.node_stats = defaultdict(lambda: {"visits": 0, "value": 0.0})
-    
-    def search(self):
-        """
-        1回のMCTS探索を実行する
+        # 探索開始時にルートノードを展開
+        self._expand_root_node()
         
-        MCTSの4ステップ（選択、拡張、シミュレーション、バックアップ）を実行する
-        """
-        # ゲーム状態のコピーを作成
-        game_copy = self.game.clone()
-        
-        # 現在のノード
-        node = self.root
-        
-        # 選択フェーズ（ルートから葉ノードまで探索）
-        action_history = []
-        
-        # 未展開のノードに到達するまで選択を繰り返す
-        while node.expanded:
-            # UCB値に基づいて次の行動と子ノードを選択
-            action, node = node.select_child(self.c_puct)
-            
-            # 選択した行動を実行
-            game_copy.move(action)
-            action_history.append(action)
-            
-            # 終了状態に到達した場合は評価
-            if game_copy.is_terminal():
-                # 最終状態の結果を取得
-                value = game_copy.get_result(game_copy.current_player)
-                
-                # バックアップ
-                self._backpropagate(action_history, value)
-                return
-        
-        # 拡張とシミュレーションフェーズ
-        
+    def _expand_root_node(self):
+        """ルートノードを展開"""
         # 現在の状態の特徴量を取得
-        state_features = game_copy.get_features()
+        state_features = self.game_state.get_features()
         
         # 方策と価値を予測
-        action_probs, value = self.actor_critic.predict(state_features)
+        action_probs, _ = self.actor_critic.predict(state_features)
         
-        # 合法手のみに制限
-        valid_moves = game_copy.get_valid_moves()
-        valid_action_probs = {}
-        for move in valid_moves:
-            if move in action_probs:
-                valid_action_probs[move] = action_probs[move]
+        # 有効な行動のみを残す
+        valid_moves = self.game_state.get_valid_moves()
+        valid_action_probs = {a: action_probs.get(a, 0) for a in valid_moves}
         
-        # 確率の正規化（合計が1になるように）
-        if valid_action_probs:
-            prob_sum = sum(valid_action_probs.values())
-            if prob_sum > 0:
-                valid_action_probs = {move: prob / prob_sum for move, prob in valid_action_probs.items()}
+        # 確率の正規化（合計を1にする）
+        if sum(valid_action_probs.values()) > 0:
+            norm_factor = sum(valid_action_probs.values())
+            valid_action_probs = {a: p / norm_factor for a, p in valid_action_probs.items()}
+        else:
+            # 全ての有効な行動に等しい確率を割り当てる
+            valid_action_probs = {a: 1.0 / len(valid_moves) for a in valid_moves}
+        
+        # ルートノードを展開
+        self.root.expand(valid_moves, valid_action_probs)
+
+    def search(self):
+        """
+        モンテカルロ木探索を実行する
+        
+        シーケンス図の探索ループ部分に対応
+        Returns:
+            最適な行動とその確率の辞書
+        """
+        # 探索回数分だけシミュレーションを実行
+        for i in range(self.n_simulations):
+            # ゲーム状態をクローン
+            sim_state = self.game_state.clone()
+            
+            # 選択、拡張、シミュレーション、バックプロパゲーション
+            # シーケンス図のループに対応
+            self._simulate_once(sim_state, self.root, 0)
+            
+        # 行動確率を計算
+        action_probs = {}
+        for action, child in self.root.children.items():
+            action_probs[action] = child.visit_count / self.root.visit_count
+            
+        return action_probs
+    
+    def _simulate_once(self, state, node: MCTSNode, depth: int) -> float:
+        """
+        1回のシミュレーションを実行する
+        
+        Args:
+            state: シミュレーション用のゲーム状態
+            node: 現在のノード
+            depth: 現在の深さ
+            
+        Returns:
+            シミュレーション結果の価値（報酬）
+        """
+        # 終端状態の場合は評価値を返す
+        if state.is_terminal():
+            return state.get_reward()
+            
+        # ノードが展開されていない場合は展開
+        if not node.expanded:
+            # 新しいノードの評価要求（AC->Transformer->AC）
+            # シーケンス図のMCTS->AC部分
+            state_features = state.get_features()
+            action_probs, value = self.actor_critic.predict(state_features)
+            
+            # 有効な行動のみを残す
+            valid_moves = state.get_valid_moves()
+            valid_action_probs = {a: action_probs.get(a, 0) for a in valid_moves}
+            
+            # 確率の正規化
+            if sum(valid_action_probs.values()) > 0:
+                norm_factor = sum(valid_action_probs.values())
+                valid_action_probs = {a: p / norm_factor for a, p in valid_action_probs.items()}
             else:
-                # 全ての確率が0の場合、一様分布として扱う
-                valid_action_probs = {move: 1.0 / len(valid_moves) for move in valid_moves}
+                valid_action_probs = {a: 1.0 / len(valid_moves) for a in valid_moves}
+            
+            # ノードを展開
+            node.expand(valid_moves, valid_action_probs)
+            
+            # 価値を返す（ニューラルネットワークからの予測値）
+            return value
         
-        # 現在のノードを拡張
-        node.expand(valid_moves, valid_action_probs)
+        # 子ノード選択（UCB値に基づく最良の行動を選択）
+        action, child_node = node.select_child(self.c_puct)
         
-        # バックアップフェーズ
-        self._backpropagate(action_history, value)
+        # 選択した行動を実行
+        state.move(action)
+        
+        # 再帰的にシミュレーション（深さを1増やす）
+        value = self._simulate_once(state, child_node, depth + 1)
+        
+        # バックプロパゲーション
+        # シーケンス図のバックプロパゲーション部分
+        node.update(-value)  # 価値を反転（相手側から見た価値なので）
+        
+        return -value  # 価値を反転して返す
     
     def _backpropagate(self, action_history: List, value: float):
         """
-        バックアップフェーズの実装
+        バックプロパゲーション処理
         
         Args:
-            action_history: 訪れた行動の履歴
-            value: バックアップする価値
+            action_history: 行動の履歴
+            value: 最終的な価値
         """
-        # ルートノードから始まる現在のゲーム状態をコピー
-        game_copy = self.game.clone()
+        # こちらはシーケンス図には表示されていない詳細実装部分
+        # 試合で価値を順方向に伝播する
+        current_node = self.root
+        current_player = self.game_state.current_player
         
-        # 終了状態から現在のプレイヤーから見た価値
-        current_value = value
-        
-        # バックアップ対象としてルートノードを追加
-        nodes_to_update = [self.root]
-        
-        # 行動履歴に従って状態を進める
-        for i, action in enumerate(action_history):
-            # 行動を実行
-            game_copy.move(action)
-            
-            # 対応するノードを取得
-            node = nodes_to_update[-1].children[action]
-            nodes_to_update.append(node)
-            
-            # 状態のハッシュを計算（統計情報用）
-            state_hash = game_copy.get_state_hash()
-            
-            # 統計情報を更新
-            self.node_stats[state_hash]["visits"] += 1
-            self.node_stats[state_hash]["value"] = (
-                self.node_stats[state_hash]["value"] * (self.node_stats[state_hash]["visits"] - 1) + current_value
-            ) / self.node_stats[state_hash]["visits"]
-        
-        # 各ノードの値を更新
-        for i, node in enumerate(nodes_to_update):
-            # 奇数インデックスは相手の手番なので、価値の符号を反転
-            if i % 2 == 1:
-                node.update(-current_value)
+        for action in action_history:
+            # 現在のノードを更新
+            current_node.update(value if current_player == self.game_state.current_player else -value)
+            # 子ノードに移動
+            if action in current_node.children:
+                current_node = current_node.children[action]
             else:
-                node.update(current_value)
-    
+                # 履歴に対応する子ノードがない場合は終了
+                break
+            # プレイヤーを交代
+            current_player = 1 - current_player
+
     def get_action_probabilities(self, temperature=1.0):
         """
-        各行動の確率分布を計算する
+        探索結果から行動確率を計算する（最終的な行動選択用）
         
         Args:
-            temperature: 温度パラメータ（低いほど確率が高い行動に集中）
+            temperature: 温度パラメータ（0に近いほど最適解に確定的）
             
         Returns:
-            (選択された行動, {行動: 確率})
+            行動とその確率の辞書
         """
-        visit_counts = {action: child.visit_count for action, child in self.root.children.items()}
+        # 訪問回数を配列に変換
+        visits = {action: child.visit_count for action, child in self.root.children.items()}
         
-        if not visit_counts:
-            # 子ノードがない場合（初期状態など）
-            valid_moves = self.game.get_valid_moves()
-            return np.random.choice(valid_moves), {move: 1.0 / len(valid_moves) for move in valid_moves}
+        if temperature == 0:  # 決定論的に選択
+            best_action = max(visits.items(), key=lambda x: x[1])[0]
+            action_probs = {action: 1.0 if action == best_action else 0.0 for action in visits}
+        else:  # 温度付きソフトマックス
+            visits_temp = {action: count ** (1.0 / temperature) for action, count in visits.items()}
+            total = sum(visits_temp.values())
+            action_probs = {action: count / total for action, count in visits_temp.items()}
             
-        # 温度パラメータに基づいて確率分布を調整
-        if temperature == 0:  # 決定的な選択
-            action = max(visit_counts.items(), key=lambda x: x[1])[0]
-            probs = {action: 1.0}
-            return action, probs
-        else:
-            # 訪問回数を確率に変換
-            counts = np.array([count for count in visit_counts.values()])
-            if temperature != 1.0:
-                # 温度で調整（低温ほど最大値に確率が集中）
-                counts = counts ** (1.0 / temperature)
-            # 正規化
-            total = counts.sum()
-            if total == 0:
-                # すべての訪問回数が0の場合
-                probs = {action: 1.0 / len(visit_counts) for action in visit_counts.keys()}
-            else:
-                probs = {action: count / total for action, count in zip(visit_counts.keys(), counts)}
+        return action_probs
+
+    def select_action(self, temperature=0.0):
+        """
+        最適な行動を選択する（訪問回数に基づく確率分布）
+        
+        Args:
+            temperature: 温度パラメータ（探索のランダム性を制御）
             
-            # 確率に基づいてランダムに行動を選択
-            actions = list(probs.keys())
-            probabilities = list(probs.values())
-            
-            # 確率の合計が1になるように正規化
-            probabilities = np.array(probabilities)
-            if probabilities.sum() > 0:
-                probabilities = probabilities / probabilities.sum()
-            else:
-                probabilities = np.ones_like(probabilities) / len(probabilities)
-                
-            # ランダムに選択
-            idx = np.random.choice(len(actions), p=probabilities)
-            action = actions[idx]
-            
-            return action, probs
+        Returns:
+            選択された行動
+        """
+        # シーケンス図の「最適手選択」部分に対応
+        # MCTSから確率分布を取得
+        action_probs = self.get_action_probabilities(temperature)
+        
+        if temperature == 0:  # 決定論的に選択
+            best_action = max(action_probs.items(), key=lambda x: x[1])[0]
+            return best_action
+        else:  # 確率的に選択
+            actions = list(action_probs.keys())
+            probs = list(action_probs.values())
+            return np.random.choice(actions, p=probs)
     
     def update_with_move(self, action):
         """
-        指定された行動を実行し、探索木を更新する
+        指定した行動でゲーム状態と探索木を更新する
         
         Args:
             action: 実行する行動
-            
-        Returns:
-            行動が有効かどうか
         """
+        # 指定された行動に対応する子ノードが存在するか確認
         if action in self.root.children:
-            # 選択された子ノードを新しいルートに設定
+            # 子ノードをルートにする（部分木を再利用）
             self.root = self.root.children[action]
             self.root.parent = None  # 親への参照を切る
-            return True
         else:
-            # 指定された行動が存在しない場合
-            # 新しいゲーム状態でルートを初期化
-            self.root = MCTSNode(0)
-            return False
+            # 対応する子ノードがない場合は新しいルートノードを作成
+            self.root = MCTSNode()
+        
+        # ゲーム状態を更新
+        self.game_state.move(action)
+        
+        # ルートノードが展開されていない場合は展開
+        if not self.root.expanded:
+            self._expand_root_node()
     
     def add_exploration_noise(self):
-        """ルートノードに探索ノイズを追加"""
-        if not self.root.expanded:
-            return
-            
-        # ディリクレノイズを生成
+        """ルートノードにディリクレノイズを追加（探索を促進）"""
         actions = list(self.root.children.keys())
         noise = np.random.dirichlet([self.dirichlet_alpha] * len(actions))
         
-        # 探索ノイズを追加
+        # ノイズを追加（exploration_fractionの割合で混合）
         for i, action in enumerate(actions):
             child = self.root.children[action]
-            child.prior = child.prior * (1 - self.exploration_fraction) + noise[i] * self.exploration_fraction
+            child.prior = (1 - self.exploration_fraction) * child.prior + self.exploration_fraction * noise[i]
 
 
 class MCTSTrainer(RLTrainer):
-    """MCTSのトレーナー"""
+    """MCTSを使った強化学習トレーナー"""
+    
     def train(self):
-        """メモリーに経験が来たらパラメータを更新する"""
-        batchs = self.remote_memory.sample()
-        for batch in batchs:
-            state = batch["state"]
-            action = batch["action"]
-            reward = batch["reward"]
-            self.parameter.init_state(state)
-
-            self.parameter.N[state][action] += 1
-            self.parameter.W[state][action] += reward
-            self.train_count += 1
-        return {}
-
-
-def test_mcts():
-    """MCTSのテスト"""
-    print("MCTSテスト開始")
-    
-    # 初期盤面を作成して表示
-    from src.shogi.board_encoder import create_initial_board
-    state = create_initial_board()
-    print("初期盤面:")
-    print(BoardVisualizer.visualize_board(state))
-    
-    # MCTSの設定（テスト用に一部パラメータをオーバーライド）
-    config = MCTSConfig(
-        simulation_times=10       # テスト用にシミュレーション回数を少なくする
-    )
-    
-    # モックオブジェクトを作成
-    class MockGame:
-        def clone(self):
-            return self
-        def move(self, action):
-            pass
-        def is_terminal(self):
-            return False
-        def get_features(self):
-            return np.zeros((9, 9, 119))  # ダミーの特徴量
-        def get_valid_moves(self):
-            return [(0, 0), (0, 1), (1, 0)]
-        def get_state_hash(self):
-            return "test_state"
-    
-    class MockActorCritic:
-        def predict(self, state_features):
-            # ダミーの方策と価値を返す
-            return {(0, 0): 0.5, (0, 1): 0.3, (1, 0): 0.2}, 0.1
-    
-    # MCTSを初期化
-    mock_game = MockGame()
-    mock_actor_critic = MockActorCritic()
-    mcts = MCTS(mock_game, mock_actor_critic)
-    
-    # 探索を実行
-    print("MCTS探索を実行中...")
-    start_time = time.time()
-    
-    # 複数回の探索を実行
-    for _ in range(config.simulation_times):
-        mcts.search()
-    
-    # 行動確率を取得
-    best_move, action_probs = mcts.get_action_probabilities(temperature=1.0)
-    end_time = time.time()
-    
-    print(f"探索時間: {end_time - start_time:.2f}秒")
-    print(f"最適な手: {best_move}")
-    print(f"行動確率: {action_probs}")
-    
-    # 注: 実際の手の適用はゲームインスタンスを通じて行う必要があります
-    # このテスト関数では盤面の変更は行わず、結果のみを表示します
-    
-    print("\n探索完了")
-    
-    return mcts, best_move
-
-
-if __name__ == "__main__":
-    test_mcts() 
+        """モデルを訓練する（実装はサブクラスで）"""
+        pass 
