@@ -3,7 +3,7 @@
 """
 
 from .actor_critic import ActorCritic
-from .shogi_model import create_swin_shogi_model, SwinShogiModel
+from .shogi_model import SwinShogiModel, create_swin_shogi_model
 from .swin_transformer import (
     MLP, WindowAttention, SwinTransformerBlock, PatchEmbed,
     BasicLayer, PatchMerging

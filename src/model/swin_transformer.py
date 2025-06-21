@@ -1,7 +1,6 @@
 """
 Swin Transformerの基本的な実装
 """
-import jax
 import jax.numpy as jnp
 import flax.linen as nn
 from typing import Callable, Optional, Tuple
@@ -120,9 +119,8 @@ class SwinTransformerBlock(nn.Module):
                     img_mask = img_mask.at[:, h, w, :].set(cnt)
                     cnt += 1
 
-            # window_partitionメソッドは(windows, info)のタプルを返すので、最初の要素だけを使用
-            mask_windows_tuple = self._window_partition(img_mask, self.window_size)
-            mask_windows = mask_windows_tuple[0]  # タプルの最初の要素（ウィンドウ）を取得
+            # マスクウィンドウを作成
+            mask_windows = self._window_partition(img_mask, self.window_size)
             mask_windows = mask_windows.reshape(-1, self.window_size * self.window_size)
             attn_mask = mask_windows[:, None, :] - mask_windows[:, :, None]
             attn_mask = jnp.where(attn_mask != 0, -100.0, 0.0)
@@ -137,32 +135,17 @@ class SwinTransformerBlock(nn.Module):
         """入力をウィンドウに分割"""
         B, H, W, C = x.shape
         
-        # 入力サイズがウィンドウサイズで割り切れるかチェック
-        pad_h = (window_size - H % window_size) % window_size
-        pad_w = (window_size - W % window_size) % window_size
-        
-        # 必要に応じてパディング
-        if pad_h > 0 or pad_w > 0:
-            x = jnp.pad(x, ((0, 0), (0, pad_h), (0, pad_w), (0, 0)))
-        
-        # パディング後のサイズ
-        H_padded, W_padded = H + pad_h, W + pad_w
-        
+        # 将棋盤は9x9でwindow_size=3なので、パディングは不要
         # ウィンドウ分割
-        x = x.reshape(B, H_padded // window_size, window_size, W_padded // window_size, window_size, C)
+        x = x.reshape(B, H // window_size, window_size, W // window_size, window_size, C)
         windows = jnp.transpose(x, (0, 1, 3, 2, 4, 5)).reshape(-1, window_size, window_size, C)
-        return windows, (H_padded, W_padded, pad_h, pad_w)
+        return windows
 
-    def _window_reverse(self, windows, window_size, H_padded, W_padded, pad_h=0, pad_w=0):
+    def _window_reverse(self, windows, window_size, H, W):
         """ウィンドウを元のサイズに戻す"""
-        B = windows.shape[0] // (H_padded * W_padded // window_size // window_size)
-        x = windows.reshape(B, H_padded // window_size, W_padded // window_size, window_size, window_size, -1)
-        x = jnp.transpose(x, (0, 1, 3, 2, 4, 5)).reshape(B, H_padded, W_padded, -1)
-        
-        # パディングがある場合は元のサイズに戻す
-        if pad_h > 0 or pad_w > 0:
-            x = x[:, :H_padded-pad_h, :W_padded-pad_w, :]
-        
+        B = windows.shape[0] // (H * W // window_size // window_size)
+        x = windows.reshape(B, H // window_size, W // window_size, window_size, window_size, -1)
+        x = jnp.transpose(x, (0, 1, 3, 2, 4, 5)).reshape(B, H, W, -1)
         return x
 
     def __call__(self, x, current_resolution=None, deterministic: bool = True):
@@ -182,8 +165,7 @@ class SwinTransformerBlock(nn.Module):
             shifted_x = x
 
         # ウィンドウ分割
-        x_windows_tuple = self._window_partition(shifted_x, self.window_size)
-        x_windows = x_windows_tuple[0]  # 最初の要素（ウィンドウ）を取得
+        x_windows = self._window_partition(shifted_x, self.window_size)
         x_windows = x_windows.reshape(-1, self.window_size * self.window_size, C)
 
         # W-MSA/SW-MSA
@@ -191,11 +173,7 @@ class SwinTransformerBlock(nn.Module):
 
         # ウィンドウ結合
         attn_windows = attn_windows.reshape(-1, self.window_size, self.window_size, C)
-        # 解像度情報を取得
-        padded_info = x_windows_tuple[1]
-        H_padded, W_padded = padded_info[0], padded_info[1]
-        pad_h, pad_w = padded_info[2], padded_info[3]
-        shifted_x = self._window_reverse(attn_windows, self.window_size, H_padded, W_padded, pad_h, pad_w)
+        shifted_x = self._window_reverse(attn_windows, self.window_size, H, W)
 
         # 逆シフト
         if self.shift_size_value > 0:
@@ -228,40 +206,40 @@ class PatchEmbed(nn.Module):
             padding=0
         )
         
-        # TODO: 将棋の持ち駒と手番を表す特殊トークンを追加
-        # 1. 持ち駒特殊トークン
-        #   - 先手の持ち駒: 7種類 (歩、香、桂、銀、金、角、飛) * 各駒の最大数
-        #   - 後手の持ち駒: 7種類 (歩、香、桂、銀、金、角、飛) * 各駒の最大数
-        # 2. 手番特殊トークン
-        #   - 1次元の値 (先手=1, 後手=0)
-        #
-        # 実装方針:
-        # 1. board_encoder.pyのget_pieces_in_hand_vectorとget_player_turn_vector関数を使用
-        # 2. 特殊トークンを線形変換してembed_dimに射影
-        # 3. 特殊トークンを入力シーケンスの先頭に追加
-        #
-        # self.hand_pieces_embed = nn.Dense(features=self.embed_dim)  # 持ち駒ベクトルの次元をembed_dimに射影
-        # self.turn_embed = nn.Dense(features=self.embed_dim)  # 手番ベクトルの次元をembed_dimに射影
+        # 特徴ベクトル用の埋め込み層
+        # 手番と持ち駒を表す15次元の特徴ベクトルをembed_dimに変換
+        self.feature_embed = nn.Dense(features=self.embed_dim)
+        
+        # CLSトークンのように機能する特徴トークン
+        # 学習可能なパラメータとして初期化
+        self.feature_token = self.param(
+            'feature_token',
+            nn.initializers.normal(0.02),
+            (1, 1, self.embed_dim)
+        )
 
-    def __call__(self, x, hand_pieces_vector=None, turn_vector=None):
+    def __call__(self, x, feature_vector, deterministic: bool = True):
         B, H, W, C = x.shape
         assert H == self.img_size[0] and W == self.img_size[1], \
             f"Input image size ({H}*{W}) doesn't match model ({self.img_size[0]}*{self.img_size[1]})"
-        x = self.proj(x)
-        x = x.reshape(B, -1, self.embed_dim)  # (B, H*W, C)
         
-        # TODO: 実装する - 持ち駒と手番の特殊トークンを追加
-        # if hand_pieces_vector is not None and turn_vector is not None:
-        #     # 持ち駒ベクトルをembed_dim次元に変換
-        #     hand_token = self.hand_pieces_embed(hand_pieces_vector)  # (B, embed_dim)
-        #     hand_token = hand_token[:, None, :]  # (B, 1, embed_dim)
-        #     
-        #     # 手番ベクトルをembed_dim次元に変換
-        #     turn_token = self.turn_embed(turn_vector)  # (B, embed_dim)
-        #     turn_token = turn_token[:, None, :]  # (B, 1, embed_dim)
-        #     
-        #     # 特殊トークンを入力シーケンスの先頭に追加
-        #     x = jnp.concatenate([hand_token, turn_token, x], axis=1)  # (B, 2+H*W, embed_dim)
+        # 画像をパッチに分割して埋め込み
+        x = self.proj(x)
+        
+        # 特徴ベクトルをembed_dimに変換
+        feature_embed = self.feature_embed(feature_vector)
+        
+        # 特徴トークンをバッチサイズ分複製
+        feature_tokens = jnp.repeat(self.feature_token, B, axis=0)
+        
+        # 特徴埋め込みを特徴トークンに加算
+        feature_tokens = feature_tokens + feature_embed.reshape(B, 1, self.embed_dim)
+        
+        # 形状を調整してタイリング（HWCからBNC形式に）
+        x = x.reshape(B, H * W, self.embed_dim)
+        
+        # 特徴トークンを連結（CLSトークンのように先頭に追加）
+        x = jnp.concatenate([feature_tokens, x], axis=1)
         
         return x
 
@@ -280,48 +258,78 @@ class BasicLayer(nn.Module):
     norm_layer: Callable
     downsample: Optional[Callable]
     use_checkpoint: bool
-
+    
     def setup(self):
         # SwinTransformerブロックを構築
-        self.blocks = [
-            SwinTransformerBlock(
+        self.blocks = {
+            f'block{i}': SwinTransformerBlock(
                 dim=self.dim,
                 input_resolution=self.input_resolution,
                 num_heads=self.num_heads,
                 window_size=self.window_size,
-                shift_size=0 if (i % config.patch_merge_factor == 0) else self.window_size // config.patch_merge_factor,
+                # シフトパターンを修正: 0番目は0シフト、1番目は1シフト、2番目は2シフト
+                shift_size=0 if i % 3 == 0 else (1 if i % 3 == 1 else 2),
                 mlp_ratio=self.mlp_ratio,
                 qkv_bias=self.qkv_bias,
                 drop=self.drop,
                 attn_drop=self.attn_drop,
-                drop_path=self.drop_path,
-                norm_layer=self.norm_layer
+                drop_path=self.drop_path[i] if isinstance(self.drop_path, list) else self.drop_path,
+                norm_layer=self.norm_layer,
             )
             for i in range(self.depth)
-        ]
-
-        # パッチ結合レイヤー
+        }
+        
+        # ダウンサンプリング層（必要な場合）
         if self.downsample is not None:
-            self.ds = self.downsample(
+            self.downsample_layer = self.downsample(
                 input_resolution=self.input_resolution,
                 dim=self.dim,
                 norm_layer=self.norm_layer
             )
+            # 特徴トークンの次元を調整するための射影層を追加
+            self.feature_proj = nn.Dense(features=self.dim * 9)  # パッチマージングのデフォルト拡大率は3x3=9
         else:
-            self.ds = None
-
+            self.downsample_layer = None
+            self.feature_proj = None
+    
     def __call__(self, x, current_resolution=None, deterministic: bool = True):
         # 現在の解像度が指定されていなければデフォルトを使用
-        resolution = current_resolution if current_resolution is not None else self.input_resolution
+        if current_resolution is None:
+            current_resolution = self.input_resolution
         
-        # 各ブロックに現在の解像度を渡す
-        for _, blk in enumerate(self.blocks):
-            x = blk(x, current_resolution=resolution, deterministic=deterministic)
+        # 先頭の特徴トークンを分離
+        feature_token = x[:, :1]  # (B, 1, C)
+        x_patches = x[:, 1:]      # (B, L-1, C)
         
-        if self.ds is not None:
-            x, new_resolution = self.ds(x)
+        # ブロックを通す前のL値をチェック
+        B, L, C = x_patches.shape
+        H, W = current_resolution
+        assert L == H * W, f"入力特徴量のサイズが不適切です。L: {L}, H*W: {H*W}"
+        
+        # 各ブロック処理
+        for block in self.blocks.values():
+            # パッチデータのみをブロックに通す
+            x_patches = block(x_patches, current_resolution=current_resolution, deterministic=deterministic)
+        
+        # ダウンサンプリングの有無に応じて処理を分岐
+        if self.downsample_layer is None:
+            # ダウンサンプリングがない場合は特徴トークンをそのまま再結合
+            x = jnp.concatenate([feature_token, x_patches], axis=1)
+            return x, current_resolution
+        else:
+            # ダウンサンプリングを行う場合
+            # 特徴トークンを除くパッチ部分のみをダウンサンプリング
+            x_patches = x_patches.reshape(B, H, W, C)
+            x_patches_downsampled, new_resolution = self.downsample_layer(x_patches)
+                        
+            # 特徴トークンを新しい次元に合わせて変換（setup時に初期化したレイヤーを使用）
+            feature_token_proj = self.feature_proj(feature_token)
+            
+            # 特徴トークンを再結合
+            x = jnp.concatenate([feature_token_proj, x_patches_downsampled], axis=1)
+            
+            # 新しい解像度を返す
             return x, new_resolution
-        return x, resolution
 
 class PatchMerging(nn.Module):
     """パッチ結合（ダウンサンプリング）レイヤー"""
@@ -338,11 +346,19 @@ class PatchMerging(nn.Module):
         self.norm = self.norm_layer()
 
     def __call__(self, x):
-        H, W = self.input_resolution
-        B, L, C = x.shape
-        assert L == H * W, f"input feature has wrong size, L: {L}, H: {H}, W: {W}"
-        x = x.reshape(B, H, W, C)
-
+        """
+        パッチ結合（ダウンサンプリング）を行う
+        
+        Args:
+            x: 入力特徴量 (B, H, W, C) 形式
+            
+        Returns:
+            tuple: ダウンサンプリングされた特徴量と新しい解像度
+        """
+        B, H, W, C = x.shape
+        assert H == self.input_resolution[0] and W == self.input_resolution[1], \
+            f"input feature has wrong resolution, got {H}x{W}, expected {self.input_resolution}"
+        
         # パッチ結合係数で割り切れるかチェック
         factor = self.patch_merge_factor
         pad_h = (factor - H % factor) % factor
