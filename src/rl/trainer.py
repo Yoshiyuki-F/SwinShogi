@@ -132,14 +132,9 @@ class Trainer:
             # アドバンテージと行動をone-hotエンコーディングに変換
             action_onehot = jax.nn.one_hot(actions, policy_logits.shape[1])
             
-            # 損失の計算
-            policy_loss = PolicyGradientLoss.policy_loss(policy_logits, action_onehot, advantages)
-            value_loss = PolicyGradientLoss.value_loss(values, target_values)
-            entropy_loss = PolicyGradientLoss.entropy_loss(policy_logits)
-            total_loss = PolicyGradientLoss.total_loss(
-                policy_loss, value_loss, entropy_loss, self.entropy_coeff)
-                
-            return total_loss, (policy_loss, value_loss, entropy_loss)
+            # utils内の総合損失計算関数を使用
+            return PolicyGradientLoss.compute_losses_from_model_outputs(
+                policy_logits, values, action_onehot, advantages, target_values, self.entropy_coeff)
         
         # 勾配の計算
         grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
