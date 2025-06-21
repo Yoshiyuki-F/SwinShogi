@@ -8,83 +8,10 @@ import os
 import flax
 import logging
 from pathlib import Path
-from src.utils.model_utils import predict, inference_jit, cross_entropy_loss, policy_gradient_loss
+from src.utils.model_utils import predict, inference_jit, PolicyGradientLoss
 
 # ロギング設定
 logger = logging.getLogger(__name__)
-
-class PolicyGradientLoss:
-    """
-    方策勾配損失関数
-    
-    方策勾配法（REINFORCE、A2Cなど）で使用する損失関数を実装します。
-    """
-    
-    @staticmethod
-    def policy_loss(logits, action_probs, advantages):
-        """
-        方策損失を計算する
-        
-        Args:
-            logits: モデルの出力ロジット
-            action_probs: ターゲット行動確率
-            advantages: アドバンテージ値
-            
-        Returns:
-            方策損失値
-        """
-        # 交差エントロピー損失
-        policy_loss = -jnp.sum(action_probs * jax.nn.log_softmax(logits) * advantages) / logits.shape[0]
-        return policy_loss
-    
-    @staticmethod
-    def value_loss(values, target_values):
-        """
-        価値損失を計算する
-        
-        Args:
-            values: モデルが予測した価値
-            target_values: ターゲット価値
-            
-        Returns:
-            価値損失値
-        """
-        # 二乗誤差
-        value_loss = jnp.mean(jnp.square(values - target_values))
-        return value_loss
-    
-    @staticmethod
-    def entropy_loss(logits):
-        """
-        エントロピー損失を計算する
-        
-        Args:
-            logits: モデルの出力ロジット
-            
-        Returns:
-            エントロピー損失値
-        """
-        # エントロピーの計算（高いほど探索的）
-        probabilities = jax.nn.softmax(logits)
-        log_probabilities = jax.nn.log_softmax(logits)
-        entropy = -jnp.sum(probabilities * log_probabilities, axis=1)
-        return -jnp.mean(entropy)  # 最大化したいので負の値に
-    
-    @staticmethod
-    def total_loss(policy_loss, value_loss, entropy_loss, entropy_coeff=0.01):
-        """
-        全体の損失を計算する
-        
-        Args:
-            policy_loss: 方策損失
-            value_loss: 価値損失
-            entropy_loss: エントロピー損失
-            entropy_coeff: エントロピー項の係数
-            
-        Returns:
-            全体の損失値
-        """
-        return policy_loss + value_loss + entropy_coeff * entropy_loss
 
 class TrainState:
     """
@@ -205,14 +132,9 @@ class Trainer:
             # アドバンテージと行動をone-hotエンコーディングに変換
             action_onehot = jax.nn.one_hot(actions, policy_logits.shape[1])
             
-            # 損失の計算
-            policy_loss = PolicyGradientLoss.policy_loss(policy_logits, action_onehot, advantages)
-            value_loss = PolicyGradientLoss.value_loss(values, target_values)
-            entropy_loss = PolicyGradientLoss.entropy_loss(policy_logits)
-            total_loss = PolicyGradientLoss.total_loss(
-                policy_loss, value_loss, entropy_loss, self.entropy_coeff)
-                
-            return total_loss, (policy_loss, value_loss, entropy_loss)
+            # utils内の総合損失計算関数を使用
+            return PolicyGradientLoss.compute_losses_from_model_outputs(
+                policy_logits, values, action_onehot, advantages, target_values, self.entropy_coeff)
         
         # 勾配の計算
         grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
