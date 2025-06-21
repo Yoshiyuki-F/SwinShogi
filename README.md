@@ -51,15 +51,19 @@ SwinShogi/
 
 - **mcts.py**: モンテカルロ木探索の実装
   - `MCTS`: 探索木を管理し、最適な手を選択
-  - `Node`: 探索木のノード表現
+  - `MCTSNode`: 探索木のノード表現
+  - `MCTSParameter`: MCTS用のパラメータ管理
 
 - **self_play.py**: 自己対戦による訓練データ生成
+  - `SelfPlay`: 自己対戦を実行し、学習データを生成するクラス
 
 ### 将棋ルール (src/shogi/)
 
 - **shogi_game.py**: 将棋ゲームのルール実装
 - **shogi_pieces.py**: 駒の定義と動きの実装
 - **board_encoder.py**: 盤面状態をモデル入力形式にエンコード
+  - `encode_board_state`: 盤面を2チャネルの特徴量にエンコード
+  - `get_feature_vector`: 手番と持ち駒を特徴ベクトルに変換
 - **board_visualizer.py**: 将棋盤の可視化
 
 ### ユーティリティ (src/utils/)
@@ -68,9 +72,23 @@ SwinShogi/
   - `predict`: 将棋の状態からモデル推論を実行
   - `inference_jit`: JIT最適化された推論関数
   - `PolicyGradientLoss`: 方策勾配法で使用する損失関数集
+    - `cross_entropy_loss`: 基本的な交差エントロピー損失
+    - `policy_loss`: アドバンテージ重み付き損失（オプション）
+    - `value_loss`: 価値関数の二乗誤差損失
+    - `entropy_loss`: 方策のエントロピー損失
+    - `compute_losses_from_model_outputs`: 総合損失計算関数
+  - 勾配処理関数群
+    - `calculate_gradient_norm`: 勾配のグローバルノルム計算
+    - `clip_gradients`: 勾配のクリッピング
+    - `process_gradients`: 勾配の処理（ノルム計算とクリッピング）
 
 - **jax_utils.py**: JAX関連のユーティリティ関数
 - **performance.py**: パフォーマンス計測と最適化
+
+### インターフェース (src/interface/)
+
+- **usi.py**: USIプロトコル実装
+  - `USIInterface`: USIコマンド処理とエンジン通信
 
 ### テスト (src/tests/)
 
@@ -80,9 +98,37 @@ SwinShogi/
 
 ## 実装内容
 
-1. 方策損失関数：交差エントロピー損失を使用し、MCTSから得られた行動確率分布とモデルの予測確率分布間の距離を最小化
-2. モデルテスト：SwinShogiModelの初期化、推論、パラメータの保存・読み込みテスト
-3. USIインターフェース：将棋エンジン通信プロトコル対応、SFEN形式対応、外部エンジン対戦機能
-4. 評価システム：自己対局評価と外部エンジン対戦評価
-5. パフォーマンス最適化：JAXのJIT最適化とバッチ処理による推論速度向上
-6. 将棋ルール：打ち歩詰め禁止、王手判定、詰み判定、千日手検出などの完全実装 
+1. **損失関数の整理と統合**
+   - `PolicyGradientLoss`クラスに全ての損失関数を集約
+   - `policy_loss`関数を柔軟化し、アドバンテージありなしの両方に対応
+   - `compute_losses_from_model_outputs`メソッドで損失計算ロジックを抽象化
+
+2. **勾配計算ロジックの最適化**
+   - 勾配計算とクリッピングのロジックを`model_utils.py`に移動
+   - `calculate_gradient_norm`, `clip_gradients`, `process_gradients`関数の追加
+   - `trainer.py`の`loss_fn`関数を簡素化
+
+3. **モデル推論の最適化**
+   - JAXのJIT最適化による推論速度の向上
+   - バッチ処理による効率的な計算
+
+4. **USIインターフェース**
+   - 将棋エンジン通信プロトコル対応
+   - SFEN形式対応
+   - 外部エンジン対戦機能
+
+5. **評価システム**
+   - 自己対局評価
+   - 外部エンジン対戦評価
+
+6. **将棋ルール**
+   - 打ち歩詰め禁止
+   - 王手判定
+   - 詰み判定
+   - 千日手検出
+
+## 最近の更新内容
+
+- **損失関数の整理**: `PolicyGradientLoss`クラス内の重複を排除し、`policy_loss`関数を柔軟化
+- **勾配処理の改善**: 勾配計算とクリッピングのロジックを整理し、再利用性を向上
+- **コード構造の最適化**: 関連する機能を論理的にグループ化し、保守性を向上 

@@ -99,7 +99,7 @@ class PolicyGradientLoss:
     @staticmethod
     def cross_entropy_loss(logits, targets):
         """
-        交差エントロピー損失を計算する
+        交差エントロピー損失を計算する（基本形）
         
         Args:
             logits: モデルの出力ロジット
@@ -111,8 +111,28 @@ class PolicyGradientLoss:
         return -jnp.sum(targets * jax.nn.log_softmax(logits)) / targets.shape[0]
     
     @staticmethod
+    def policy_loss(logits, action_probs, advantages=None):
+        """
+        方策損失を計算する
+        
+        Args:
+            logits: モデルの出力ロジット
+            action_probs: ターゲット行動確率
+            advantages: アドバンテージ値（Noneの場合は通常の交差エントロピー損失として計算）
+            
+        Returns:
+            方策損失値
+        """
+        if advantages is None:
+            # 通常の交差エントロピー損失
+            return PolicyGradientLoss.cross_entropy_loss(logits, action_probs)
+        
+        # アドバンテージによる重み付け交差エントロピー損失
+        return -jnp.sum(action_probs * jax.nn.log_softmax(logits) * advantages) / logits.shape[0]
+    
+    @staticmethod
     @jax.jit
-    def policy_gradient_loss(params, model_apply_fn, inputs, targets, feature_vector):
+    def policy_gradient_loss(params, model_apply_fn, inputs, targets, feature_vector, advantages=None):
         """
         方策勾配損失関数（JIT最適化）
         
@@ -122,29 +142,13 @@ class PolicyGradientLoss:
             inputs: 入力データ
             targets: ターゲット確率分布
             feature_vector: 特徴ベクトル
+            advantages: アドバンテージ値（オプション）
             
         Returns:
             方策勾配損失値
         """
         policy_logits, _ = model_apply_fn(params, inputs, feature_vector=feature_vector)
-        return PolicyGradientLoss.cross_entropy_loss(policy_logits, targets)
-    
-    @staticmethod
-    def policy_loss(logits, action_probs, advantages):
-        """
-        方策損失を計算する
-        
-        Args:
-            logits: モデルの出力ロジット
-            action_probs: ターゲット行動確率
-            advantages: アドバンテージ値
-            
-        Returns:
-            方策損失値
-        """
-        # 交差エントロピー損失にアドバンテージを重み付け
-        policy_loss = -jnp.sum(action_probs * jax.nn.log_softmax(logits) * advantages) / logits.shape[0]
-        return policy_loss
+        return PolicyGradientLoss.policy_loss(policy_logits, targets, advantages)
     
     @staticmethod
     def value_loss(values, target_values):
@@ -220,9 +224,6 @@ class PolicyGradientLoss:
             
         return total_loss, (policy_loss, value_loss, entropy_loss)
 
-# 後方互換性のために個別の関数も提供
-cross_entropy_loss = PolicyGradientLoss.cross_entropy_loss
-policy_gradient_loss = PolicyGradientLoss.policy_gradient_loss
 
 
 
