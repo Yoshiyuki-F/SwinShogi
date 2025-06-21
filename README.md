@@ -43,6 +43,10 @@ SwinShogi/
   - `PatchEmbed`: 入力画像をパッチに分割して埋め込む
   - `PatchMerging`: パッチのマージとダウンサンプリング処理
 
+- **actor_critic.py**: 方策と価値を予測するネットワーク
+  - `ActorCritic`: モデルをラップし、状態から行動確率と価値を予測するクラス
+  - JIT最適化された推論関数を提供
+
 ### 強化学習 (src/rl/)
 
 - **trainer.py**: モデルトレーニングクラス
@@ -83,7 +87,14 @@ SwinShogi/
     - `process_gradients`: 勾配の処理（ノルム計算とクリッピング）
 
 - **jax_utils.py**: JAX関連のユーティリティ関数
+  - `setup_jax`: JAXの設定とGPU検出
+  - `create_rng_keys`: 乱数生成キーの作成
+
 - **performance.py**: パフォーマンス計測と最適化
+  - `benchmark_inference`: 推論速度のベンチマーク
+  - `find_optimal_batch_size`: 最適なバッチサイズの探索
+  - `compare_devices`: CPU/GPU性能比較
+  - `profile_mcts`: MCTSのプロファイリング
 
 ### インターフェース (src/interface/)
 
@@ -131,4 +142,5 @@ SwinShogi/
 
 - **損失関数の整理**: `PolicyGradientLoss`クラス内の重複を排除し、`policy_loss`関数を柔軟化
 - **勾配処理の改善**: 勾配計算とクリッピングのロジックを整理し、再利用性を向上
-- **コード構造の最適化**: 関連する機能を論理的にグループ化し、保守性を向上 
+- **コード構造の最適化**: 関連する機能を論理的にグループ化し、保守性を向上
+- **ダウンサンプリング処理の改良**: `BasicLayer`クラスでの特徴トークン処理を最適化 
