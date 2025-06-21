@@ -4,8 +4,7 @@
 from src.shogi.shogi_pieces import (
     ShogiPiece, Player
 )
-from typing import List, Tuple, Dict, Any, Optional
-import re
+from typing import List, Tuple
 import hashlib
 from src.shogi.board_visualizer import BoardVisualizer
     
@@ -76,50 +75,34 @@ class ShogiGame:
         rows = board_str.split('/')
         for row_idx, row in enumerate(rows):
             col_idx = 0
-            for char_idx, char in enumerate(row):
+            char_idx = 0
+            while char_idx < len(row):
+                char = row[char_idx]
                 if char.isdigit():
                     col_idx += int(char)
+                    char_idx += 1
                 else:
                     player = Player.GOTE if char.islower() else Player.SENTE
                     promoted = False
-                    piece_char = char.lower()
                     
-                    if piece_char == 'p':
-                        piece_type = "pawn"
-                    elif piece_char == 'l':
-                        piece_type = "lance"
-                    elif piece_char == 'n':
-                        piece_type = "knight"
-                    elif piece_char == 's':
-                        piece_type = "silver"
-                    elif piece_char == 'g':
-                        piece_type = "gold"
-                    elif piece_char == 'b':
-                        piece_type = "bishop"
-                    elif piece_char == 'r':
-                        piece_type = "rook"
-                    elif piece_char == 'k':
-                        piece_type = "king"
-                    elif piece_char == '+':
+                    if char.lower() == '+':
                         # 成り駒の処理
                         promoted = True
-                        next_char = row[char_idx + 1].lower()
-                        if next_char == 'p':
-                            piece_type = "pawn"
-                        elif next_char == 'l':
-                            piece_type = "lance"
-                        elif next_char == 'n':
-                            piece_type = "knight"
-                        elif next_char == 's':
-                            piece_type = "silver"
-                        elif next_char == 'b':
-                            piece_type = "bishop"
-                        elif next_char == 'r':
-                            piece_type = "rook"
-                        col_idx += 1  # +記号の次の文字をスキップ
-                        
+                        char_idx += 1
+                        next_char = row[char_idx].lower()
+                        piece_char = f"+{next_char}"
+                    else:
+                        piece_char = char.lower()
+                    
+                    # PIECE_CHAR_INFOを使用して駒の種類を取得
+                    if piece_char in ShogiPiece.PIECE_CHAR_INFO:
+                        piece_type = ShogiPiece.PIECE_CHAR_INFO[piece_char]["type"]
+                    else:
+                        raise ValueError(f"不明な駒文字: {piece_char}")
+                    
                     self.board[row_idx][col_idx] = ShogiPiece(piece_type, player, promoted)
                     col_idx += 1
+                    char_idx += 1
         
         # 手番の設定
         self.current_player = Player.SENTE if turn == 'b' else Player.GOTE
@@ -138,20 +121,11 @@ class ShogiGame:
                 piece_char = captures[i].lower()
                 player = Player.SENTE if captures[i].isupper() else Player.GOTE
                 
-                if piece_char == 'p':
-                    name = "pawn"
-                elif piece_char == 'l':
-                    name = "lance"
-                elif piece_char == 'n':
-                    name = "knight"
-                elif piece_char == 's':
-                    name = "silver"
-                elif piece_char == 'g':
-                    name = "gold"
-                elif piece_char == 'b':
-                    name = "bishop"
-                elif piece_char == 'r':
-                    name = "rook"
+                # PIECE_CHAR_INFOを使用して駒の種類を取得
+                if piece_char in ShogiPiece.PIECE_CHAR_INFO:
+                    name = ShogiPiece.PIECE_CHAR_INFO[piece_char]["type"]
+                else:
+                    raise ValueError(f"不明な持ち駒文字: {piece_char}")
                 
                 self.captures[player][name] = self.captures[player].get(name, 0) + count
                 i += 1

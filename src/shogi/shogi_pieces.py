@@ -22,98 +22,126 @@ class ShogiPiece:
             "symbol": "歩", 
             "can_promote": True, 
             "promoted_type": "promoted_pawn", 
-            "directions": [(0, -1)]  # 前に1マス
+            "directions": [(0, -1)],  # 前に1マス
+            "type_idx": 0,  # 駒タイプのインデックス
+            "char_idx": 0    # 駒文字のインデックス
         },
         'l': {
             "type": "lance", 
             "symbol": "香", 
             "can_promote": True, 
             "promoted_type": "promoted_lance", 
-            "directions": [(0, -1, "line")]  # 前に何マスでも
+            "directions": [(0, -1, "line")],  # 前に何マスでも
+            "type_idx": 1,
+            "char_idx": 1
         },
         'n': {
             "type": "knight", 
             "symbol": "桂", 
             "can_promote": True, 
             "promoted_type": "promoted_knight", 
-            "directions": [(-1, -2), (1, -2)]  # 前に2マス、横に1マス
+            "directions": [(-1, -2), (1, -2)],  # 前に2マス、横に1マス
+            "type_idx": 2,
+            "char_idx": 2
         },
         's': {
             "type": "silver", 
             "symbol": "銀", 
             "can_promote": True, 
             "promoted_type": "promoted_silver", 
-            "directions": [(-1, -1), (0, -1), (1, -1), (-1, 1), (1, 1)]  # 銀の動き
+            "directions": [(-1, -1), (0, -1), (1, -1), (-1, 1), (1, 1)],  # 銀の動き
+            "type_idx": 3,
+            "char_idx": 3
         },
         'g': {
             "type": "gold", 
             "symbol": "金", 
             "can_promote": False, 
             "promoted_type": None, 
-            "directions": Gold_directions  # 金の動き
+            "directions": Gold_directions,  # 金の動き
+            "type_idx": 4,
+            "char_idx": 4
         },
         'b': {
             "type": "bishop", 
             "symbol": "角", 
             "can_promote": True, 
             "promoted_type": "promoted_bishop", 
-            "directions": Bishop_directions  # 角の動き
+            "directions": Bishop_directions,  # 角の動き
+            "type_idx": 5,
+            "char_idx": 5
         },
         'r': {
             "type": "rook", 
             "symbol": "飛", 
             "can_promote": True, 
             "promoted_type": "promoted_rook", 
-            "directions": Rook_directions  # 飛車の動き
+            "directions": Rook_directions,  # 飛車の動き
+            "type_idx": 6,
+            "char_idx": 6
         },
         'k': {
             "type": "king", 
             "symbol": "玉", 
             "can_promote": False, 
             "promoted_type": None, 
-            "directions": [(-1, -1), (0, -1), (1, -1), (-1, 0), (1, 0), (-1, 1), (0, 1), (1, 1)]  # 玉の動き
+            "directions": [(-1, -1), (0, -1), (1, -1), (-1, 0), (1, 0), (-1, 1), (0, 1), (1, 1)],  # 玉の動き
+            "type_idx": 7,
+            "char_idx": None  # 打ち駒としては使わない
         },
         '+p': {
             "type": "promoted_pawn", 
             "symbol": "と", 
             "can_promote": False, 
             "base_type": "pawn", 
-            "directions": Gold_directions  # 金と同じ動き
+            "directions": Gold_directions,  # 金と同じ動き
+            "type_idx": 8,
+            "char_idx": None
         },
         '+l': {
             "type": "promoted_lance", 
             "symbol": "成香", 
             "can_promote": False, 
             "base_type": "lance", 
-            "directions": Gold_directions  # 金と同じ動き
+            "directions": Gold_directions,  # 金と同じ動き
+            "type_idx": 9,
+            "char_idx": None
         },
         '+n': {
             "type": "promoted_knight", 
             "symbol": "成桂", 
             "can_promote": False, 
             "base_type": "knight", 
-            "directions": Gold_directions  # 金と同じ動き
+            "directions": Gold_directions,  # 金と同じ動き
+            "type_idx": 10,
+            "char_idx": None
         },
         '+s': {
             "type": "promoted_silver", 
             "symbol": "成銀", 
             "can_promote": False, 
             "base_type": "silver", 
-            "directions": Gold_directions  # 金と同じ動き
+            "directions": Gold_directions,  # 金と同じ動き
+            "type_idx": 11,
+            "char_idx": None
         },
         '+b': {
             "type": "promoted_bishop", 
             "symbol": "馬", 
             "can_promote": False, 
             "base_type": "bishop", 
-            "directions": Bishop_directions + [(0, -1), (-1, 0), (1, 0), (0, 1)]  # 追加の動き（十字1マス）
+            "directions": Bishop_directions + [(0, -1), (-1, 0), (1, 0), (0, 1)],  # 追加の動き（十字1マス）
+            "type_idx": 12,
+            "char_idx": None
         },
         '+r': {
             "type": "promoted_rook", 
             "symbol": "龍", 
             "can_promote": False, 
             "base_type": "rook", 
-            "directions": Rook_directions + [(-1, -1), (1, -1), (-1, 1), (1, 1)]  # 追加の動き（斜め1マス）
+            "directions": Rook_directions + [(-1, -1), (1, -1), (-1, 1), (1, 1)],  # 追加の動き（斜め1マス）
+            "type_idx": 13,
+            "char_idx": None
         }
     }
     
@@ -169,7 +197,6 @@ class ShogiPiece:
         """駒の名前を取得"""
         return self.piece_type
     
-    @property
     def __str__(self) -> str:
         """文字列表現"""
         symbol = self.get_symbol(self.piece_type)

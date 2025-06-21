@@ -1,8 +1,7 @@
 """将棋の盤面表示用のユーティリティ"""
 
-from typing import Dict, List, Tuple, Optional, Union
+from typing import Dict, List, Optional
 import io
-import os
 from .shogi_pieces import Player, ShogiPiece
 
 class BoardVisualizer:

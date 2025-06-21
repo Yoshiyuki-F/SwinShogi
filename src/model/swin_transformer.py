@@ -227,12 +227,42 @@ class PatchEmbed(nn.Module):
             strides=self.patch_size,
             padding=0
         )
+        
+        # TODO: 将棋の持ち駒と手番を表す特殊トークンを追加
+        # 1. 持ち駒特殊トークン
+        #   - 先手の持ち駒: 7種類 (歩、香、桂、銀、金、角、飛) * 各駒の最大数
+        #   - 後手の持ち駒: 7種類 (歩、香、桂、銀、金、角、飛) * 各駒の最大数
+        # 2. 手番特殊トークン
+        #   - 1次元の値 (先手=1, 後手=0)
+        #
+        # 実装方針:
+        # 1. board_encoder.pyのget_pieces_in_hand_vectorとget_player_turn_vector関数を使用
+        # 2. 特殊トークンを線形変換してembed_dimに射影
+        # 3. 特殊トークンを入力シーケンスの先頭に追加
+        #
+        # self.hand_pieces_embed = nn.Dense(features=self.embed_dim)  # 持ち駒ベクトルの次元をembed_dimに射影
+        # self.turn_embed = nn.Dense(features=self.embed_dim)  # 手番ベクトルの次元をembed_dimに射影
 
-    def __call__(self, x):
+    def __call__(self, x, hand_pieces_vector=None, turn_vector=None):
         B, H, W, C = x.shape
         assert H == self.img_size[0] and W == self.img_size[1], \
             f"Input image size ({H}*{W}) doesn't match model ({self.img_size[0]}*{self.img_size[1]})"
         x = self.proj(x)
+        x = x.reshape(B, -1, self.embed_dim)  # (B, H*W, C)
+        
+        # TODO: 実装する - 持ち駒と手番の特殊トークンを追加
+        # if hand_pieces_vector is not None and turn_vector is not None:
+        #     # 持ち駒ベクトルをembed_dim次元に変換
+        #     hand_token = self.hand_pieces_embed(hand_pieces_vector)  # (B, embed_dim)
+        #     hand_token = hand_token[:, None, :]  # (B, 1, embed_dim)
+        #     
+        #     # 手番ベクトルをembed_dim次元に変換
+        #     turn_token = self.turn_embed(turn_vector)  # (B, embed_dim)
+        #     turn_token = turn_token[:, None, :]  # (B, 1, embed_dim)
+        #     
+        #     # 特殊トークンを入力シーケンスの先頭に追加
+        #     x = jnp.concatenate([hand_token, turn_token, x], axis=1)  # (B, 2+H*W, embed_dim)
+        
         return x
 
 class BasicLayer(nn.Module):
