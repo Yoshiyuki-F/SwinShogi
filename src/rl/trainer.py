@@ -1,13 +1,13 @@
 """
 強化学習のトレーニング関連クラス
 """
-
+import jax.numpy as jnp
 import jax
 import os
 import flax
 import logging
 from pathlib import Path
-from src.utils.model_utils import PolicyGradientLoss, process_gradients
+from src.utils.model_utils import PolicyGradientLoss
 
 # ロギング設定
 logger = logging.getLogger(__name__)
@@ -107,6 +107,9 @@ class Trainer:
             "total_loss": [],
             "grad_norm": []
         }
+
+
+
     
     def _train_step(self, params, optimizer_state, states, actions, advantages, target_values):
         """
@@ -123,6 +126,29 @@ class Trainer:
         Returns:
             (新しいパラメータ, 新しい最適化器状態, 損失値の辞書)
         """
+        def process_gradients(grads, max_norm):
+            """
+            勾配の計算とクリッピングを行う
+            
+            Args:
+                grads: モデルの勾配
+                max_norm: 勾配クリッピングの最大ノルム
+            
+            Returns:
+                (clipped_grads, global_norm): クリッピングされた勾配とそのグローバルノルム
+            """
+            # 勾配のノルムを計算
+            flat_grads = jax.tree_leaves(grads)
+            global_norm = jnp.sqrt(jnp.sum(jnp.array([jnp.sum(jnp.square(g)) for g in flat_grads])))
+            
+            # 勾配クリッピング
+            clipped_grads = jax.tree_map(
+                lambda g: jnp.clip(g, -max_norm, max_norm),
+                grads
+            )
+            
+            return clipped_grads, global_norm
+        
         def loss_fn(params):
             """勾配を計算するための損失関数"""
             # モデルの順伝播
@@ -228,7 +254,9 @@ class Trainer:
             logger.error(f"モデル読み込みエラー: {e}")
             return False
 
-# 訓練と推論関連の基本機能はsrc/utils/model_utils.pyに集約されています
+
+
+
 
 if __name__ == "__main__":
     # テスト実行コード - 実際のトレーニング開始スクリプトは別途作成します
