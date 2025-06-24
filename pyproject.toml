@@ -5,6 +5,7 @@ description = "将棋AIプロジェクト - Swin Transformerベースの深層�
 authors = ["Yoshi <yoshi@example.com>"]
 readme = "README.md"
 packages = [{include = "src"}]
+license = "MIT"
 
 [tool.poetry.dependencies]
 python = ">=3.13,<3.14"
@@ -29,4 +30,18 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry.scripts]
 train = "src.__main__:main"
-test = "scripts.test_all:main" 
+test = "scripts.test_all:main"
+
+[tool.black]
+line-length = 88
+target-version = ['py313']
+
+[tool.isort]
+profile = "black"
+line_length = 88
+
+[tool.mypy]
+python_version = "3.13"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true 
