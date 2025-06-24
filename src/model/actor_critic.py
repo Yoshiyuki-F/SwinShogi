@@ -27,8 +27,28 @@ class ActorCritic:
         self.model = model
         self.params = params
 
-
-
+    @staticmethod
+    @jax.jit
+    def predict_jit(model, params, state_features, feature_vector=None):
+        """
+        JAXのJIT最適化された推論関数
+        
+        この関数はJITコンパイルされているため、繰り返し呼び出されると大幅な速度向上が得られます。
+        一見すると単純なラッパーのように見えますが、JIT最適化によるパフォーマンス向上が目的です。
+        
+        Args:
+            model: SwinShogiモデルまたはActorCriticモデル
+            params: モデルパラメータ
+            state_features: 状態の特徴量
+            feature_vector: 追加の特徴ベクトル（オプション）
+            
+        Returns:
+            (方策ロジット, 価値)
+        """
+        if feature_vector is not None:
+            return model.apply(params, state_features, feature_vector=feature_vector, deterministic=True)
+        else:
+            return model.apply(params, state_features, deterministic=True)
 
     @staticmethod
     def predict(model, params, state=None, state_features=None):
@@ -44,30 +64,6 @@ class ActorCritic:
         Returns:
             方策（辞書形式）と価値のタプル、または生のロジットと値
         """
-
-        @staticmethod
-        @jax.jit
-        def predict_jit(model, params, state_features, feature_vector=None):
-            """
-            JAXのJIT最適化された推論関数
-            
-            この関数はJITコンパイルされているため、繰り返し呼び出されると大幅な速度向上が得られます。
-            一見すると単純なラッパーのように見えますが、JIT最適化によるパフォーマンス向上が目的です。
-            
-            Args:
-                model: SwinShogiモデルまたはActorCriticモデル
-                params: モデルパラメータ
-                state_features: 状態の特徴量
-                feature_vector: 追加の特徴ベクトル（オプション）
-                
-            Returns:
-                (方策ロジット, 価値)
-            """
-            if feature_vector is not None:
-                return model.apply(params, state_features, feature_vector=feature_vector, deterministic=True)
-            else:
-                return model.apply(params, state_features, deterministic=True)
-            
             
         # 状態特徴量の準備
         if state_features is None and state is not None:
@@ -80,7 +76,7 @@ class ActorCritic:
             feature_tensor = jnp.array(feature_vector).reshape(1, -1)
             
             # モデル推論
-            policy_logits, value = predict_jit(model, params, state_features, feature_tensor)
+            policy_logits, value = ActorCritic.predict_jit(model, params, state_features, feature_tensor)
         else:
             # 特徴量が直接与えられている場合
             # バッチ次元の確認
@@ -90,7 +86,7 @@ class ActorCritic:
             # モデル推論
             if hasattr(model, 'apply'):
                 # Flaxモデルの場合
-                policy_logits, value = predict_jit(model, params, state_features)
+                policy_logits, value = ActorCritic.predict_jit(model, params, state_features)
             else:
                 # ActorCriticインスタンス自体が渡された場合（ただし非推奨）
                 policy_logits, value = model.predict_jit(params, state_features)
