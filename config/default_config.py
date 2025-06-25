@@ -7,39 +7,74 @@ import flax.linen as nn
 
 # モデル設定
 MODEL_CONFIG = {
-    'img_size': (9, 9),             # 将棋盤のサイズ
+    # 入力設定
+    'img_size': (9, 9),             # 将棋盤のサイズ（入力解像度）
     'patch_size': (1, 1),           # パッチサイズ
     'in_chans': 2,                  # 入力チャネル数（駒の種類とプレイヤー）
+    
+    # アーキテクチャ設定
     'embed_dim': 96,                # 埋め込み次元
     'depths': (3, 3),               # 各段階の層の深さ
     'num_heads': (3, 6),            # 各段階のヘッド数
     'window_size': 3,               # 注意機構のウィンドウサイズ
     'mlp_ratio': 4.0,               # MLPの拡大率
     'qkv_bias': True,               # QKV投影にバイアスを使うかどうか
-    'drop_rate': 0.0,               # ドロップアウト率
+    'patch_merge_factor': 3,        # パッチ結合の分割係数（通常のSwinは2、このSwinは3）
+    
+    # 正規化・ドロップアウト設定
+    'drop_rate': 0.0,               # 一般的なドロップアウト率
     'attn_drop_rate': 0.0,          # 注意機構のドロップアウト率
-    'drop_path_rate': 0.1,          # パスドロップ率
+    'drop_path_rate': 0.1,          # パスドロップ率（確率的深度）
     'patch_norm': True,             # パッチ正規化を行うかどうか
+    'norm_layer': None,             # 正規化レイヤー（Noneの場合はLayerNormを使用）
+    
+    # 出力設定
     'n_policy_outputs': 9*9*27,     # 政策出力（移動元×移動先×駒の種類）
+    'feature_dim': 15,              # 特徴ベクトル（手番と持ち駒）の次元
+    
+    # その他の設定
     'use_checkpoint': False,        # チェックポイントを使用するかどうか
     'shift_size': 0,                # シフトサイズ（SW-MSA用）
     'downsample': None,             # ダウンサンプリング関数
-    'drop': 0.0,                    # 一般的なドロップアウト率
-    'drop_path': 0.0,               # パスドロップ率（個別ブロック用）
-    'input_resolution': (9, 9),     # 入力解像度
-    'patch_merge_factor': 3,        # パッチ結合の分割係数（通常のSwinは2、このSwinは3）
-    'feature_dim': 15               # 特徴ベクトル（手番と持ち駒）の次元
 }
 
 # 強化学習設定
 RL_CONFIG = {
-    'num_iterations': 10,
-    'num_episodes': 10,
-    'max_moves': 300,
-    'batch_size': 32,
-    'learning_rate': 0.001,
-    'value_coef': 1.0,
-    'entropy_coef': 0.01
+    # Training iterations
+    'num_iterations': 100,          # Number of training iterations
+    'num_episodes': 25,             # Episodes per iteration
+    'max_moves': 300,               # Maximum moves per game
+    
+    # Training parameters
+    'batch_size': 32,               # Batch size for training
+    'learning_rate': 0.001,         # Learning rate
+    'weight_decay': 1e-4,           # Weight decay for regularization
+    'grad_clip_norm': 1.0,          # Gradient clipping norm
+    
+    # Loss coefficients
+    'value_coef': 1.0,              # Value loss coefficient
+    'entropy_coef': 0.01,           # Entropy loss coefficient
+    'policy_coef': 1.0,             # Policy loss coefficient
+    
+    # Self-play parameters
+    'mcts_simulations': 100,        # MCTS simulations during self-play
+    'temperature_threshold': 30,    # Move threshold for temperature change
+    'temperature_init': 1.0,        # Initial temperature
+    'temperature_final': 0.1,       # Final temperature
+    
+    # Training schedule
+    'save_interval': 10,            # Save model every N iterations
+    'eval_interval': 5,             # Evaluate model every N iterations
+    'checkpoint_interval': 25,      # Create checkpoint every N iterations
+    
+    # Model updates
+    'train_steps_per_iteration': 100,  # Training steps per iteration
+    'replay_buffer_size': 10000,    # Size of replay buffer
+    'min_buffer_size': 1000,        # Minimum buffer size before training
+    
+    # Evaluation
+    'eval_games': 10,               # Number of games for evaluation
+    'eval_mcts_simulations': 200,   # MCTS simulations during evaluation
 }
 
 # MCTS設定
@@ -51,7 +86,7 @@ MCTS_CONFIG = {
     'dirichlet_alpha': 0.3,
     'dirichlet_weight': 0.25,
     'value_weight': 0.5,
-    'action_num': 2187, #TODO really?
+    'action_num': 2187,
     'n_simulations': 400,
     'exploration_fraction': 0.25,
     'pb_c_init': 1.25,
@@ -61,7 +96,16 @@ MCTS_CONFIG = {
     'discount': 1.0,
     'value_threshold': -float('inf'),
     'visit_threshold': 1,
-    'virtual_loss': 3
+    'virtual_loss': 3,
+    'max_depth': 200,              # Maximum search depth
+    'min_visits_to_expand': 1,     # Minimum visits before expanding a node
+    'use_dirichlet_noise': True,   # Whether to add Dirichlet noise to root
+    'add_exploration_noise': True, # Whether to add exploration noise
+    'exploration_noise_alpha': 0.3, # Alpha for Dirichlet noise
+    'exploration_noise_epsilon': 0.25, # Fraction of noise to add
+    'c_puct_init': 1.25,           # Initial c_puct value
+    'c_puct_base': 19652,          # Base for c_puct calculation
+    'fpu_reduction': 0.25          # First Play Urgency reduction
 }
 
 # USI設定
@@ -103,12 +147,6 @@ class ModelConfig:
     use_checkpoint: bool = MODEL_CONFIG['use_checkpoint']
     shift_size: int = MODEL_CONFIG['shift_size']
     downsample: Optional[Callable] = MODEL_CONFIG['downsample']
-    default_img_size: Tuple[int, int] = MODEL_CONFIG['default_img_size']
-    default_patch_size: Tuple[int, int] = MODEL_CONFIG['default_patch_size']
-    default_in_chans: int = MODEL_CONFIG['default_in_chans']
-    drop: float = MODEL_CONFIG['drop']
-    drop_path: float = MODEL_CONFIG['drop_path']
-    input_resolution: Tuple[int, int] = MODEL_CONFIG['input_resolution']
     patch_merge_factor: int = MODEL_CONFIG['patch_merge_factor']
     feature_dim: int = MODEL_CONFIG['feature_dim']
 
@@ -143,10 +181,61 @@ class MCTSConfig:
     value_weight: float = MCTS_CONFIG['value_weight']       # 価値と方策の重み付け
     pb_c_init: float = MCTS_CONFIG['pb_c_init']             # PUCT計算の初期係数
     pb_c_base: int = MCTS_CONFIG['pb_c_base']               # PUCT計算のベース値
+    
+    # MCTS.pyで使用される追加設定
+    max_depth: int = MCTS_CONFIG.get('max_depth', 200)     # 最大探索深度
+    min_visits_to_expand: int = MCTS_CONFIG.get('min_visits_to_expand', 1)  # 展開に必要な最小訪問数
+    use_dirichlet_noise: bool = MCTS_CONFIG.get('use_dirichlet_noise', True)  # ディリクレノイズを使用するか
+    exploration_noise_alpha: float = MCTS_CONFIG.get('exploration_noise_alpha', 0.3)  # 探索ノイズのアルファ
+    exploration_noise_epsilon: float = MCTS_CONFIG.get('exploration_noise_epsilon', 0.25)  # 探索ノイズのイプシロン
+    c_puct_init: float = MCTS_CONFIG.get('c_puct_init', 1.25)  # PUCT初期値
+    c_puct_base: float = MCTS_CONFIG.get('c_puct_base', 19652)  # PUCTベース値
+    fpu_reduction: float = MCTS_CONFIG.get('fpu_reduction', 0.25)  # FPU削減
 
 @dataclass
 class TrainingConfig:
-    """モデルトレーニングの設定パラメータ"""
+    """Training configuration parameters for SwinShogi"""
+    
+    # Training iterations
+    num_iterations: int = RL_CONFIG['num_iterations']
+    num_episodes: int = RL_CONFIG['num_episodes']
+    max_moves: int = RL_CONFIG['max_moves']
+    
+    # Training parameters
+    batch_size: int = RL_CONFIG['batch_size']
+    learning_rate: float = RL_CONFIG['learning_rate']
+    weight_decay: float = RL_CONFIG['weight_decay']
+    grad_clip_norm: float = RL_CONFIG['grad_clip_norm']
+    
+    # Loss coefficients
+    value_coef: float = RL_CONFIG['value_coef']
+    entropy_coef: float = RL_CONFIG['entropy_coef']
+    policy_coef: float = RL_CONFIG['policy_coef']
+    
+    # Self-play parameters
+    mcts_simulations: int = RL_CONFIG['mcts_simulations']
+    temperature_threshold: int = RL_CONFIG['temperature_threshold']
+    temperature_init: float = RL_CONFIG['temperature_init']
+    temperature_final: float = RL_CONFIG['temperature_final']
+    
+    # Training schedule
+    save_interval: int = RL_CONFIG['save_interval']
+    eval_interval: int = RL_CONFIG['eval_interval']
+    checkpoint_interval: int = RL_CONFIG['checkpoint_interval']
+    
+    # Model updates
+    train_steps_per_iteration: int = RL_CONFIG['train_steps_per_iteration']
+    replay_buffer_size: int = RL_CONFIG['replay_buffer_size']
+    min_buffer_size: int = RL_CONFIG['min_buffer_size']
+    
+    # Evaluation
+    eval_games: int = RL_CONFIG['eval_games']
+    eval_mcts_simulations: int = RL_CONFIG['eval_mcts_simulations']
+
+
+@dataclass
+class LegacyTrainingConfig:
+    """Legacy training configuration (deprecated)"""
     
     # 一般的な設定
     batch_size: int = RL_CONFIG['batch_size']        # バッチサイズ
@@ -241,4 +330,12 @@ def update_config(config: RLConfig, updates: Dict[str, Any]) -> RLConfig:
                 # トップレベルの設定の更新
                 setattr(config, key, value)
     
-    return config 
+    return config
+
+def get_training_config() -> TrainingConfig:
+    """Get training configuration"""
+    return TrainingConfig()
+
+def get_mcts_config() -> MCTSConfig:
+    """Get MCTS configuration"""
+    return MCTSConfig() 

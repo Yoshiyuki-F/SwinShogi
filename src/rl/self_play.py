@@ -1,128 +1,383 @@
 """
-自己対戦による強化学習データ生成
+Self-play data generation for SwinShogi reinforcement learning
+
+This module implements self-play functionality that generates training data
+by having the neural network play against itself using MCTS for move selection.
 """
 
+import jax.numpy as jnp
 import numpy as np
 import time
 import logging
+from typing import List, Dict, Tuple, Optional, Any
+from dataclasses import dataclass
 
-# ロギング設定
+from src.rl.mcts import MCTS
+from src.shogi.shogi_game import ShogiGame
+from src.shogi.board_encoder import encode_board_state, get_feature_vector
+from src.shogi.board_visualizer import BoardVisualizer
+from config.default_config import get_mcts_config, MCTSConfig
+
+# Logger setup
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class SelfPlayExample:
+    """Single example from self-play game"""
+    board_state: jnp.ndarray  # Encoded board state (9, 9, 2)
+    feature_vector: jnp.ndarray  # Feature vector (15,)
+    action_probs: jnp.ndarray  # MCTS action probabilities (2187,)
+    player: int  # Player who made this move (0 or 1)
+    position_value: float  # SwinTransformer evaluation of this position
+
+
+@dataclass
+class SelfPlayResult:
+    """Result of a self-play game"""
+    examples: List[SelfPlayExample]
+    winner: Optional[int]  # 0, 1, or None for draw
+    game_length: int
+    final_score: Dict[int, float]  # Final scores for each player
+
 
 class SelfPlay:
     """
-    自己対戦クラス
+    Self-play data generator for SwinShogi
     
-    モデルを使用して自己対戦を行い、トレーニングデータを生成します。
+    Generates training data by having the neural network play against itself
+    using MCTS for move selection and policy improvement.
     """
     
-    def __init__(self, game_env, actor_critic, mcts_simulations=400, temperature=1.0):
+    def __init__(self, 
+                 model, 
+                 params, 
+                 config: Optional[MCTSConfig] = None,
+                 max_moves: int = 300,
+                 temperature_threshold: int = 30,
+                 temperature_init: float = 1.0,
+                 temperature_final: float = 0.1):
         """
-        自己対戦の初期化
+        Initialize self-play generator
         
         Args:
-            game_env: ゲーム環境
-            actor_critic: ActorCriticネットワーク
-            mcts_simulations: MCTSのシミュレーション回数
-            temperature: 行動選択の温度パラメータ
+            model: Neural network model
+            params: Model parameters
+            config: MCTS configuration
+            max_moves: Maximum moves per game
+            temperature_threshold: Move number to switch temperature
+            temperature_init: Initial temperature for move selection
+            temperature_final: Final temperature for move selection
         """
-        self.game_env = game_env
-        self.actor_critic = actor_critic
-        self.mcts_simulations = mcts_simulations
-        self.temperature = temperature
+        self.model = model
+        self.params = params
+        self.mcts_config = config or get_mcts_config()
+        self.max_moves = max_moves
+        self.temperature_threshold = temperature_threshold
+        self.temperature_init = temperature_init
+        self.temperature_final = temperature_final
+        
+        # Initialize MCTS
+        self.mcts = MCTS(model, params, self.mcts_config)
+        
+        # Statistics
+        self.games_played = 0
+        self.total_moves = 0
+        self.game_outcomes = {'player_0_wins': 0, 'player_1_wins': 0, 'draws': 0}
     
-    def play_game(self):
+    def play_game(self, verbose: bool = False) -> SelfPlayResult:
         """
-        1ゲームの自己対戦を実行する
+        Play a single self-play game
         
+        Args:
+            verbose: Whether to log game progress
+            
         Returns:
-            (状態のリスト, 行動のリスト, 報酬のリスト, 最終結果)
+            SelfPlayResult containing game data and outcome
         """
-        from src.rl.mcts import MCTS
+        # Initialize game
+        game = ShogiGame()
+        examples = []
+        move_count = 0
         
-        # ゲームの初期化
-        game = self.game_env.clone()
-        game.reset()
+        if verbose:
+            logger.info(f"Starting self-play game {self.games_played + 1}")
         
-        # MCTSの初期化
-        mcts = MCTS(game, self.actor_critic)
-        
-        # 対局データの保存用
-        states = []
-        actions = []
-        rewards = []
-        
-        # 最大手数（将棋は通常300手程度）
-        max_moves = 500
-        
-        for move_num in range(max_moves):
-            # 現在の状態を保存
-            state_features = game.get_features()
-            states.append(state_features)
+        while not game.is_terminal and move_count < self.max_moves:
+            # Get current game state using ShogiGame property
+            game_state = game.game_state
             
-            # MCTSで行動を選択
-            for _ in range(self.mcts_simulations):
-                mcts.search()
-                
-            # 温度パラメータを調整（序盤は探索的、終盤は最適）
-            if move_num < 30:
-                temp = self.temperature
-            else:
-                temp = 0.1
-                
-            # 行動確率の取得
-            action, action_probs = mcts.get_action_probabilities(temperature=temp)
+            # Determine temperature based on move count
+            from src.rl.game_utils import get_temperature_for_move
+            temperature = get_temperature_for_move(
+                move_count, self.temperature_threshold, 
+                self.temperature_init, self.temperature_final
+            )
             
-            # 行動を実行
-            game.move(action)
-            actions.append(action)
+            # Display board if verbose (before MCTS search)
+            if verbose:
+                print(f"\n=== Move {move_count} ===")
+                print(f"Current player: {'先手' if game.current_player.value == 0 else '後手'}")
+                print(f"Temperature: {temperature:.2f}, MCTS simulations: {self.mcts_config.n_simulations}")
+                print("Thinking...")
             
-            # 報酬（勝敗）を確認
-            if game.is_terminal():
-                result = game.get_result(game.current_player)
-                rewards.extend([result] * len(states))
+            # Run MCTS search - this will compute position evaluation as part of the process
+            action_probs, root_node = self.mcts.search(game_state)
+            
+            # Extract position evaluation from MCTS root node evaluation
+            # The root node gets evaluated during MCTS search
+            nn_value = root_node.value
+            checkmate_bonus = game._calculate_checkmate_bonus(game.current_player)
+            position_value = nn_value + checkmate_bonus
+            
+            # Add evaluation to game_state for display
+            game_state['evaluation'] = position_value
+            
+            # Display board with evaluation after MCTS search
+            if verbose:
+                BoardVisualizer.visualize_board(game_state, self.model, self.params)
+            
+            if not action_probs:
+                if verbose:
+                    logger.warning(f"No valid moves found at move {move_count}")
                 break
             
-            # 報酬は終了時以外は0
-            rewards.append(0.0)
+            # Convert action probabilities to full action vector
+            full_action_probs = self._convert_to_full_action_vector(action_probs)
             
-            # 探索木を更新
-            mcts.update_with_move(action)
+            # Encode game state for training
+            board_encoded = encode_board_state(game_state)
+            feature_vector = get_feature_vector(game_state)
             
-        return states, actions, rewards, game.get_result(0)  # 先手視点の結果
+            # Use the pre-computed evaluation from game_state
+            position_value = game_state['evaluation']
+            
+            # Create training example
+            example = SelfPlayExample(
+                board_state=jnp.array(board_encoded),
+                feature_vector=jnp.array(feature_vector),
+                action_probs=full_action_probs,
+                player=game.current_player.value,
+                position_value=position_value
+            )
+            examples.append(example)
+            
+            # Select action using temperature
+            selected_action = self.mcts.select_action(action_probs, temperature)
+            
+            if verbose:
+                print(f"Selected move: {selected_action}")
+                if len(action_probs) > 1:
+                    # Show top 3 candidate moves
+                    sorted_actions = sorted(action_probs.items(), key=lambda x: x[1], reverse=True)[:3]
+                    print("Top candidates:")
+                    for i, (action, prob) in enumerate(sorted_actions, 1):
+                        print(f"  {i}. {action}: {prob:.3f}")
+                print()
+            
+            # Apply move using utility function
+            from src.rl.game_utils import validate_and_apply_move
+            success = validate_and_apply_move(game, selected_action, verbose)
+            if not success:
+                break
+            
+            move_count += 1
+            
+            if verbose and move_count % 20 == 0:
+                logger.info(f"Move {move_count}, current player: {game.current_player}")
+        
+        # Determine game outcome using utility function
+        from src.rl.game_utils import determine_game_outcome, calculate_game_scores
+        winner = determine_game_outcome(game)
+        final_score = calculate_game_scores(winner)
+        
+        # Update statistics using utility function
+        from src.rl.game_utils import update_game_statistics
+        stats = {
+            'games_played': self.games_played,
+            'total_moves': self.total_moves,
+            'game_outcomes': self.game_outcomes
+        }
+        update_game_statistics(stats, winner, move_count)
+        self.games_played = stats['games_played']
+        self.total_moves = stats['total_moves']
+        self.game_outcomes = stats['game_outcomes']
+        
+        if verbose:
+            outcome_str = f"Player {winner} wins" if winner is not None else "Draw"
+            logger.info(f"Game completed: {outcome_str}, {move_count} moves")
+            
+            # Display final board state
+            final_evaluation = game.evaluate_with_model(self.model, self.params)
+            final_game_state = game.game_state
+            final_game_state['evaluation'] = final_evaluation
+            print(f"\n=== Final Position (Game Over) ===")
+            BoardVisualizer.visualize_board(final_game_state, self.model, self.params)
+            print(f"Result: {outcome_str}")
+        
+        return SelfPlayResult(
+            examples=examples,
+            winner=winner,
+            game_length=move_count,
+            final_score=final_score
+        )
     
-    def generate_training_data(self, num_games=10):
+    def generate_games(self, 
+                      num_games: int, 
+                      verbose: bool = True) -> List[SelfPlayResult]:
         """
-        複数ゲームの自己対戦を実行し、トレーニングデータを生成する
+        Generate multiple self-play games
         
         Args:
-            num_games: 対局数
+            num_games: Number of games to generate
+            verbose: Whether to log progress
             
         Returns:
-            (状態のバッチ, 行動のバッチ, 報酬のバッチ)
+            List of SelfPlayResult objects
         """
-        all_states = []
-        all_actions = []
-        all_rewards = []
         results = []
+        start_time = time.time()
         
-        for i in range(num_games):
-            start_time = time.time()
-            states, actions, rewards, result = self.play_game()
+        if verbose:
+            logger.info(f"Generating {num_games} self-play games...")
+        
+        for game_idx in range(num_games):
+            game_start_time = time.time()
             
-            all_states.extend(states)
-            all_actions.extend(actions)
-            all_rewards.extend(rewards)
+            # Play game
+            result = self.play_game(verbose=False)
             results.append(result)
             
-            end_time = time.time()
-            logger.info(f"ゲーム {i+1}/{num_games} 完了 - 所要時間: {end_time - start_time:.1f}秒, 結果: {result}")
+            # Log progress
+            if verbose and (game_idx + 1) % max(1, num_games // 10) == 0:
+                game_time = time.time() - game_start_time
+                elapsed = time.time() - start_time
+                eta = elapsed * (num_games / (game_idx + 1) - 1)
+                
+                logger.info(
+                    f"Game {game_idx + 1}/{num_games} completed "
+                    f"({game_time:.1f}s, {result.game_length} moves) "
+                    f"- ETA: {eta:.1f}s"
+                )
         
-        # 統計情報
-        win_rate = results.count(1.0) / len(results)
-        draw_rate = results.count(0.0) / len(results)
-        loss_rate = results.count(-1.0) / len(results)
+        total_time = time.time() - start_time
+        if verbose:
+            self._log_generation_summary(results, total_time)
         
-        logger.info(f"自己対戦結果 - 勝率: {win_rate:.2f}, 引分率: {draw_rate:.2f}, 敗率: {loss_rate:.2f}")
+        return results
+    
+    def results_to_training_examples(self, 
+                                   results: List[SelfPlayResult]) -> List[Dict[str, Any]]:
+        """
+        Convert self-play results to training examples using pre-computed evaluations
         
-        return np.array(all_states), np.array(all_actions), np.array(all_rewards) 
+        Args:
+            results: List of SelfPlayResult objects
+            
+        Returns:
+            List of training examples compatible with trainer
+        """
+        from src.rl.training_utils import game_results_to_training_examples
+        return game_results_to_training_examples(results)
+    
+    def update_model_params(self, new_params):
+        """Update model parameters for MCTS"""
+        self.params = new_params
+        self.mcts.params = new_params
+    
+    def get_statistics(self) -> Dict[str, Any]:
+        """Get self-play statistics"""
+        from src.rl.game_utils import get_statistics_summary
+        stats = {
+            'games_played': self.games_played,
+            'total_moves': self.total_moves,
+            'game_outcomes': self.game_outcomes
+        }
+        return get_statistics_summary(stats)
+    
+    def reset_statistics(self):
+        """Reset self-play statistics"""
+        from src.rl.game_utils import reset_statistics
+        stats = {
+            'games_played': self.games_played,
+            'total_moves': self.total_moves,
+            'game_outcomes': self.game_outcomes
+        }
+        reset_statistics(stats)
+        self.games_played = stats['games_played']
+        self.total_moves = stats['total_moves']
+        self.game_outcomes = stats['game_outcomes']
+    
+    # Helper methods
+    def _convert_to_full_action_vector(self, action_probs: Dict[str, float]) -> jnp.ndarray:
+        """
+        Convert action probabilities dict to full action vector
+        
+        Args:
+            action_probs: Dictionary mapping actions to probabilities
+            
+        Returns:
+            Full action probability vector of size 2187
+        """
+        from src.utils.action_utils import convert_to_full_action_vector
+        return convert_to_full_action_vector(action_probs)
+    
+    
+    def _log_generation_summary(self, results: List[SelfPlayResult], total_time: float):
+        """Log summary of game generation"""
+        from src.rl.training_utils import log_game_generation_summary
+        log_game_generation_summary(results, total_time, "self-play")
+
+
+# Utility functions
+def create_self_play(model, params, **config_overrides) -> SelfPlay:
+    """
+    Create SelfPlay instance with custom configuration
+    
+    Args:
+        model: Neural network model
+        params: Model parameters
+        **config_overrides: Override default configuration
+        
+    Returns:
+        Configured SelfPlay instance
+    """
+    mcts_config = get_mcts_config()
+    
+    # Apply MCTS config overrides
+    mcts_overrides = {k: v for k, v in config_overrides.items() 
+                     if k in ['n_simulations', 'c_puct', 'max_depth']}
+    if mcts_overrides:
+        for key, value in mcts_overrides.items():
+            setattr(mcts_config, key, value)
+    
+    # Apply SelfPlay config overrides
+    selfplay_kwargs = {k: v for k, v in config_overrides.items() 
+                      if k in ['max_moves', 'temperature_threshold', 
+                              'temperature_init', 'temperature_final']}
+    
+    return SelfPlay(model, params, mcts_config, **selfplay_kwargs)
+
+
+def generate_training_data(model, 
+                         params, 
+                         num_games: int,
+                         **config_overrides) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+    """
+    Convenient function to generate training data
+    
+    Args:
+        model: Neural network model
+        params: Model parameters
+        num_games: Number of games to generate
+        **config_overrides: Configuration overrides
+        
+    Returns:
+        Tuple of (training_examples, statistics)
+    """
+    self_play = create_self_play(model, params, **config_overrides)
+    results = self_play.generate_games(num_games)
+    training_examples = self_play.results_to_training_examples(results)
+    statistics = self_play.get_statistics()
+    
+    return training_examples, statistics

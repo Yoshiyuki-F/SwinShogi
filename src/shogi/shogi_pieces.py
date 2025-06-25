@@ -100,7 +100,7 @@ class ShogiPiece:
         },
         '+l': {
             "type": "promoted_lance", 
-            "symbol": "成香", 
+            "symbol": "杏",
             "can_promote": False, 
             "base_type": "lance", 
             "directions": Gold_directions,  # 金と同じ動き
@@ -109,7 +109,7 @@ class ShogiPiece:
         },
         '+n': {
             "type": "promoted_knight", 
-            "symbol": "成桂", 
+            "symbol": "圭",
             "can_promote": False, 
             "base_type": "knight", 
             "directions": Gold_directions,  # 金と同じ動き
@@ -118,7 +118,7 @@ class ShogiPiece:
         },
         '+s': {
             "type": "promoted_silver", 
-            "symbol": "成銀", 
+            "symbol": "全",
             "can_promote": False, 
             "base_type": "silver", 
             "directions": Gold_directions,  # 金と同じ動き

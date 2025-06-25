@@ -8,7 +8,6 @@ import time
 import unittest
 from typing import Dict, List, Tuple, Any, Optional, Union, Callable, TypeVar, cast
 from src.model.shogi_model import create_swin_shogi_model, SwinShogiModel
-from src.utils.model_utils import inference_jit
 from src.shogi.board_encoder import encode_board_state, get_feature_vector
 from config.default_config import get_model_config, ModelConfig
 from src.shogi.shogi_pieces import Player
@@ -60,8 +59,13 @@ def test_swin_shogi_model() -> bool:
     # JIT最適化テスト
     print("\n------------ JIT最適化テスト ------------")
     
+    # Create JIT-compiled inference function
+    @jax.jit
+    def jit_inference(params, input_data, feature_vec):
+        return model.apply(params, input_data, feature_vector=feature_vec)
+    
     start_time = time.time()
-    policy_logits_jit, value_jit = inference_jit(model, params, test_input, test_feature)
+    policy_logits_jit, value_jit = jit_inference(params, test_input, test_feature)
     end_time = time.time()
     
     print(f"JIT最適化後の推論所要時間: {(end_time - start_time) * 1000:.2f}ms")

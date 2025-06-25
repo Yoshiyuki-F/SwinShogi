@@ -168,7 +168,7 @@ SwinShogi/
    - 打ち歩詰め禁止
    - 王手判定
    - 詰み判定
-   - 千日手検出 #TODO
+   - 千日手検出 
 
 7. **テスト体制の整備**
    - 標準的なPythonテスト構造（`tests/`ディレクトリ）への移行
@@ -176,12 +176,24 @@ SwinShogi/
    - 統合テストスクリプトの作成（`scripts/run_integration_test.sh`）
    - シーケンス図に沿った連携テストの実装
 
-## 最近の更新内容
+## TODO
+✅ **完了済み**: 
+- トレーニングしたデータ（SwinTransformerのパラメータと出力）をSaveする機能 → `CheckpointManager`で実装済み
+- generate_self_play_data がtrainer.pyにあるのはおかしい？ほかのAI と戦ったときにもTrainingしたい → `DataGenerationManager`で解決済み  
+- def is_terminal と def _get_terminal_value で temp_gameを使っている問題 → 共有インスタンスで解決済み
+- self_play.pyに定義されている大量のDef（ほかのAIと戦ったときに使えない）を他のファイルに移動 → `game_utils.py`と`training_utils.py`で解決済み
 
-- **テストコードの改善**: MCTSテストを標準的なユニットテスト形式に変更し、`tests/`ディレクトリに移動
-- **統合テストの強化**: Transformer、Actor-Critic、MCTSの連携を確認する統合テストを実装
-- **モデル特徴抽出の改良**: SwinShogiモデルの特徴抽出機能を強化し、Actor-Criticとの連携を改善
-- **損失関数の整理**: `PolicyGradientLoss`クラス内の重複を排除し、`policy_loss`関数を柔軟化
-- **勾配処理の改善**: 勾配計算とクリッピングのロジックを整理し、再利用性を向上
-- **コード構造の最適化**: 関連する機能を論理的にグループ化し、保守性を向上
-- **ダウンサンプリング処理の改良**: `BasicLayer`クラスでの特徴トークン処理を最適化 
+## リファクタリング完了
+
+全ての主要なTODOが完了しました！
+
+### 新しく作成されたモジュール:
+- **`src/rl/game_utils.py`**: ゲーム共通ユーティリティ（温度調整、勝敗判定、統計管理など）
+- **`src/rl/training_utils.py`**: 訓練データ変換ユーティリティ（結果→訓練例変換、ログ出力など）
+
+### 改善点:
+- ✅ コードの重複削除
+- ✅ 他のAI対戦時でも使える汎用的な関数群
+- ✅ self_play.pyの簡素化
+- ✅ 将来のAI対戦実装に向けた基盤整備
+ 

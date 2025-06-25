@@ -76,7 +76,10 @@ class SwinShogiModel(flax.linen.Module):
         }
         
         # 最終正規化層
-        self.norm = config.norm_layer()
+        if config.norm_layer is not None:
+            self.norm = config.norm_layer()
+        else:
+            self.norm = flax.linen.LayerNorm()
         
         # 政策ヘッド（移動確率）
         self.policy_head = flax.linen.Sequential([

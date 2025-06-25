@@ -1,0 +1,613 @@
+{
+  "step": 200,
+  "timestamp": "20250625_010640",
+  "jax_version": "0.6.2",
+  "params_shape": {
+    "params.absolute_pos_embed": {
+      "shape": [
+        1,
+        81,
+        96
+      ],
+      "dtype": "float32"
+    },
+    "params.patch_embed.feature_token": {
+      "shape": [
+        1,
+        1,
+        96
+      ],
+      "dtype": "float32"
+    },
+    "params.patch_embed.proj.kernel": {
+      "shape": [
+        1,
+        1,
+        2,
+        96
+      ],
+      "dtype": "float32"
+    },
+    "params.patch_embed.proj.bias": {
+      "shape": [
+        96
+      ],
+      "dtype": "float32"
+    },
+    "params.patch_embed.feature_embed.kernel": {
+      "shape": [
+        15,
+        96
+      ],
+      "dtype": "float32"
+    },
+    "params.patch_embed.feature_embed.bias": {
+      "shape": [
+        96
+      ],
+      "dtype": "float32"
+    },
+    "params.layers_layer0.blocks_block0.norm1.scale": {
+      "shape": [
+        96
+      ],
+      "dtype": "float32"
+    },
+    "params.layers_layer0.blocks_block0.norm1.bias": {
+      "shape": [
+        96
+      ],
+      "dtype": "float32"
+    },
+    "params.layers_layer0.blocks_block0.attn.qkv.kernel": {
+      "shape": [
+        96,
+        288
+      ],
+      "dtype": "float32"
+    },
+    "params.layers_layer0.blocks_block0.attn.qkv.bias": {
+      "shape": [
+        288
+      ],
+      "dtype": "float32"
+    },
+    "params.layers_layer0.blocks_block0.attn.proj.kernel": {
+      "shape": [
+        96,
+        96
+      ],
+      "dtype": "float32"
+    },
+    "params.layers_layer0.blocks_block0.attn.proj.bias": {
+      "shape": [
+        96
+      ],
+      "dtype": "float32"
+    },
+    "params.layers_layer0.blocks_block0.norm2.scale": {
+      "shape": [
+        96
+      ],
+      "dtype": "float32"
+    },
+    "params.layers_layer0.blocks_block0.norm2.bias": {
+      "shape": [
+        96
+      ],
+      "dtype": "float32"
+    },
+    "params.layers_layer0.blocks_block0.mlp.Dense_0.kernel": {
+      "shape": [
+        96,
+        384
+      ],
+      "dtype": "float32"
+    },
+    "params.layers_layer0.blocks_block0.mlp.Dense_0.bias": {
+      "shape": [
+        384
+      ],
+      "dtype": "float32"
+    },
+    "params.layers_layer0.blocks_block0.mlp.Dense_1.kernel": {
+      "shape": [
+        384,
+        96
+      ],
+      "dtype": "float32"
+    },
+    "params.layers_layer0.blocks_block0.mlp.Dense_1.bias": {
+      "shape": [
+        96
+      ],
+      "dtype": "float32"
+    },
+    "params.layers_layer0.blocks_block1.norm1.scale": {
+      "shape": [
+        96
+      ],
+      "dtype": "float32"
+    },
+    "params.layers_layer0.blocks_block1.norm1.bias": {
+      "shape": [
+        96
+      ],
+      "dtype": "float32"
+    },
+    "params.layers_layer0.blocks_block1.attn.qkv.kernel": {
+      "shape": [
+        96,
+        288
+      ],
+      "dtype": "float32"
+    },
+    "params.layers_layer0.blocks_block1.attn.qkv.bias": {
+      "shape": [
+        288
+      ],
+      "dtype": "float32"
+    },
+    "params.layers_layer0.blocks_block1.attn.proj.kernel": {
+      "shape": [
+        96,
+        96
+      ],
+      "dtype": "float32"
+    },
+    "params.layers_layer0.blocks_block1.attn.proj.bias": {
+      "shape": [
+        96
+      ],
+      "dtype": "float32"
+    },
+    "params.layers_layer0.blocks_block1.norm2.scale": {
+      "shape": [
+        96
+      ],
+      "dtype": "float32"
+    },
+    "params.layers_layer0.blocks_block1.norm2.bias": {
+      "shape": [
+        96
+      ],
+      "dtype": "float32"
+    },
+    "params.layers_layer0.blocks_block1.mlp.Dense_0.kernel": {
+      "shape": [
+        96,
+        384
+      ],
+      "dtype": "float32"
+    },
+    "params.layers_layer0.blocks_block1.mlp.Dense_0.bias": {
+      "shape": [
+        384
+      ],
+      "dtype": "float32"
+    },
+    "params.layers_layer0.blocks_block1.mlp.Dense_1.kernel": {
+      "shape": [
+        384,
+        96
+      ],
+      "dtype": "float32"
+    },
+    "params.layers_layer0.blocks_block1.mlp.Dense_1.bias": {
+      "shape": [
+        96
+      ],
+      "dtype": "float32"
+    },
+    "params.layers_layer0.blocks_block2.norm1.scale": {
+      "shape": [
+        96
+      ],
+      "dtype": "float32"
+    },
+    "params.layers_layer0.blocks_block2.norm1.bias": {
+      "shape": [
+        96
+      ],
+      "dtype": "float32"
+    },
+    "params.layers_layer0.blocks_block2.attn.qkv.kernel": {
+      "shape": [
+        96,
+        288
+      ],
+      "dtype": "float32"
+    },
+    "params.layers_layer0.blocks_block2.attn.qkv.bias": {
+      "shape": [
+        288
+      ],
+      "dtype": "float32"
+    },
+    "params.layers_layer0.blocks_block2.attn.proj.kernel": {
+      "shape": [
+        96,
+        96
+      ],
+      "dtype": "float32"
+    },
+    "params.layers_layer0.blocks_block2.attn.proj.bias": {
+      "shape": [
+        96
+      ],
+      "dtype": "float32"
+    },
+    "params.layers_layer0.blocks_block2.norm2.scale": {
+      "shape": [
+        96
+      ],
+      "dtype": "float32"
+    },
+    "params.layers_layer0.blocks_block2.norm2.bias": {
+      "shape": [
+        96
+      ],
+      "dtype": "float32"
+    },
+    "params.layers_layer0.blocks_block2.mlp.Dense_0.kernel": {
+      "shape": [
+        96,
+        384
+      ],
+      "dtype": "float32"
+    },
+    "params.layers_layer0.blocks_block2.mlp.Dense_0.bias": {
+      "shape": [
+        384
+      ],
+      "dtype": "float32"
+    },
+    "params.layers_layer0.blocks_block2.mlp.Dense_1.kernel": {
+      "shape": [
+        384,
+        96
+      ],
+      "dtype": "float32"
+    },
+    "params.layers_layer0.blocks_block2.mlp.Dense_1.bias": {
+      "shape": [
+        96
+      ],
+      "dtype": "float32"
+    },
+    "params.layers_layer0.downsample_layer.norm.scale": {
+      "shape": [
+        864
+      ],
+      "dtype": "float32"
+    },
+    "params.layers_layer0.downsample_layer.norm.bias": {
+      "shape": [
+        864
+      ],
+      "dtype": "float32"
+    },
+    "params.layers_layer0.downsample_layer.reduction.kernel": {
+      "shape": [
+        864,
+        864
+      ],
+      "dtype": "float32"
+    },
+    "params.layers_layer0.downsample_layer.reduction.bias": {
+      "shape": [
+        864
+      ],
+      "dtype": "float32"
+    },
+    "params.layers_layer0.feature_proj.kernel": {
+      "shape": [
+        96,
+        864
+      ],
+      "dtype": "float32"
+    },
+    "params.layers_layer0.feature_proj.bias": {
+      "shape": [
+        864
+      ],
+      "dtype": "float32"
+    },
+    "params.layers_layer1.blocks_block0.norm1.scale": {
+      "shape": [
+        864
+      ],
+      "dtype": "float32"
+    },
+    "params.layers_layer1.blocks_block0.norm1.bias": {
+      "shape": [
+        864
+      ],
+      "dtype": "float32"
+    },
+    "params.layers_layer1.blocks_block0.attn.qkv.kernel": {
+      "shape": [
+        864,
+        2592
+      ],
+      "dtype": "float32"
+    },
+    "params.layers_layer1.blocks_block0.attn.qkv.bias": {
+      "shape": [
+        2592
+      ],
+      "dtype": "float32"
+    },
+    "params.layers_layer1.blocks_block0.attn.proj.kernel": {
+      "shape": [
+        864,
+        864
+      ],
+      "dtype": "float32"
+    },
+    "params.layers_layer1.blocks_block0.attn.proj.bias": {
+      "shape": [
+        864
+      ],
+      "dtype": "float32"
+    },
+    "params.layers_layer1.blocks_block0.norm2.scale": {
+      "shape": [
+        864
+      ],
+      "dtype": "float32"
+    },
+    "params.layers_layer1.blocks_block0.norm2.bias": {
+      "shape": [
+        864
+      ],
+      "dtype": "float32"
+    },
+    "params.layers_layer1.blocks_block0.mlp.Dense_0.kernel": {
+      "shape": [
+        864,
+        3456
+      ],
+      "dtype": "float32"
+    },
+    "params.layers_layer1.blocks_block0.mlp.Dense_0.bias": {
+      "shape": [
+        3456
+      ],
+      "dtype": "float32"
+    },
+    "params.layers_layer1.blocks_block0.mlp.Dense_1.kernel": {
+      "shape": [
+        3456,
+        864
+      ],
+      "dtype": "float32"
+    },
+    "params.layers_layer1.blocks_block0.mlp.Dense_1.bias": {
+      "shape": [
+        864
+      ],
+      "dtype": "float32"
+    },
+    "params.layers_layer1.blocks_block1.norm1.scale": {
+      "shape": [
+        864
+      ],
+      "dtype": "float32"
+    },
+    "params.layers_layer1.blocks_block1.norm1.bias": {
+      "shape": [
+        864
+      ],
+      "dtype": "float32"
+    },
+    "params.layers_layer1.blocks_block1.attn.qkv.kernel": {
+      "shape": [
+        864,
+        2592
+      ],
+      "dtype": "float32"
+    },
+    "params.layers_layer1.blocks_block1.attn.qkv.bias": {
+      "shape": [
+        2592
+      ],
+      "dtype": "float32"
+    },
+    "params.layers_layer1.blocks_block1.attn.proj.kernel": {
+      "shape": [
+        864,
+        864
+      ],
+      "dtype": "float32"
+    },
+    "params.layers_layer1.blocks_block1.attn.proj.bias": {
+      "shape": [
+        864
+      ],
+      "dtype": "float32"
+    },
+    "params.layers_layer1.blocks_block1.norm2.scale": {
+      "shape": [
+        864
+      ],
+      "dtype": "float32"
+    },
+    "params.layers_layer1.blocks_block1.norm2.bias": {
+      "shape": [
+        864
+      ],
+      "dtype": "float32"
+    },
+    "params.layers_layer1.blocks_block1.mlp.Dense_0.kernel": {
+      "shape": [
+        864,
+        3456
+      ],
+      "dtype": "float32"
+    },
+    "params.layers_layer1.blocks_block1.mlp.Dense_0.bias": {
+      "shape": [
+        3456
+      ],
+      "dtype": "float32"
+    },
+    "params.layers_layer1.blocks_block1.mlp.Dense_1.kernel": {
+      "shape": [
+        3456,
+        864
+      ],
+      "dtype": "float32"
+    },
+    "params.layers_layer1.blocks_block1.mlp.Dense_1.bias": {
+      "shape": [
+        864
+      ],
+      "dtype": "float32"
+    },
+    "params.layers_layer1.blocks_block2.norm1.scale": {
+      "shape": [
+        864
+      ],
+      "dtype": "float32"
+    },
+    "params.layers_layer1.blocks_block2.norm1.bias": {
+      "shape": [
+        864
+      ],
+      "dtype": "float32"
+    },
+    "params.layers_layer1.blocks_block2.attn.qkv.kernel": {
+      "shape": [
+        864,
+        2592
+      ],
+      "dtype": "float32"
+    },
+    "params.layers_layer1.blocks_block2.attn.qkv.bias": {
+      "shape": [
+        2592
+      ],
+      "dtype": "float32"
+    },
+    "params.layers_layer1.blocks_block2.attn.proj.kernel": {
+      "shape": [
+        864,
+        864
+      ],
+      "dtype": "float32"
+    },
+    "params.layers_layer1.blocks_block2.attn.proj.bias": {
+      "shape": [
+        864
+      ],
+      "dtype": "float32"
+    },
+    "params.layers_layer1.blocks_block2.norm2.scale": {
+      "shape": [
+        864
+      ],
+      "dtype": "float32"
+    },
+    "params.layers_layer1.blocks_block2.norm2.bias": {
+      "shape": [
+        864
+      ],
+      "dtype": "float32"
+    },
+    "params.layers_layer1.blocks_block2.mlp.Dense_0.kernel": {
+      "shape": [
+        864,
+        3456
+      ],
+      "dtype": "float32"
+    },
+    "params.layers_layer1.blocks_block2.mlp.Dense_0.bias": {
+      "shape": [
+        3456
+      ],
+      "dtype": "float32"
+    },
+    "params.layers_layer1.blocks_block2.mlp.Dense_1.kernel": {
+      "shape": [
+        3456,
+        864
+      ],
+      "dtype": "float32"
+    },
+    "params.layers_layer1.blocks_block2.mlp.Dense_1.bias": {
+      "shape": [
+        864
+      ],
+      "dtype": "float32"
+    },
+    "params.norm.scale": {
+      "shape": [
+        864
+      ],
+      "dtype": "float32"
+    },
+    "params.norm.bias": {
+      "shape": [
+        864
+      ],
+      "dtype": "float32"
+    },
+    "params.policy_head.layers_0.kernel": {
+      "shape": [
+        864,
+        512
+      ],
+      "dtype": "float32"
+    },
+    "params.policy_head.layers_0.bias": {
+      "shape": [
+        512
+      ],
+      "dtype": "float32"
+    },
+    "params.policy_head.layers_2.kernel": {
+      "shape": [
+        512,
+        2187
+      ],
+      "dtype": "float32"
+    },
+    "params.policy_head.layers_2.bias": {
+      "shape": [
+        2187
+      ],
+      "dtype": "float32"
+    },
+    "params.value_head.layers_0.kernel": {
+      "shape": [
+        864,
+        256
+      ],
+      "dtype": "float32"
+    },
+    "params.value_head.layers_0.bias": {
+      "shape": [
+        256
+      ],
+      "dtype": "float32"
+    },
+    "params.value_head.layers_2.kernel": {
+      "shape": [
+        256,
+        1
+      ],
+      "dtype": "float32"
+    },
+    "params.value_head.layers_2.bias": {
+      "shape": [
+        1
+      ],
+      "dtype": "float32"
+    }
+  },
+  "has_optimizer_state": false,
+  "convenience_test": true,
+  "model_type": "SwinShogiModel",
+  "model_config": {}
+}

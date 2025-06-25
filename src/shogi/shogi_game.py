@@ -4,12 +4,22 @@
 from src.shogi.shogi_pieces import (
     ShogiPiece, Player
 )
-from typing import List, Tuple
+from typing import List, Tuple, Dict
 import hashlib
 from src.shogi.board_visualizer import BoardVisualizer
     
 class ShogiGame:
     """将棋のゲームを表すクラス"""
+    
+    # クラス変数として共有インスタンスを保持
+    _shared_instance = None
+    
+    @classmethod
+    def get_shared_instance(cls):
+        """共有インスタンスを取得（なければ作成）"""
+        if cls._shared_instance is None:
+            cls._shared_instance = cls()
+        return cls._shared_instance
     
     def __init__(self):
         """ゲームの初期化"""
@@ -201,10 +211,20 @@ class ShogiGame:
                                     continue  # 打ち歩詰めは禁止
                             
                             # 持ち駒を打つ手を追加
-                            move = f"{piece_name[0].upper()}*{self.coords_to_square(row, col)}"
-                            moves.append(move)
+                            # piece_nameからUSI文字を取得
+                            piece_char = self._get_piece_char_from_type(piece_name)
+                            if piece_char:
+                                move = f"{piece_char}*{self.coords_to_square(row, col)}"
+                                moves.append(move)
         
         return moves
+    
+    def _get_piece_char_from_type(self, piece_type: str) -> str:
+        """駒の種類からUSI文字を取得"""
+        for char, info in ShogiPiece.PIECE_CHAR_INFO.items():
+            if info["type"] == piece_type:
+                return char
+        return ""
     
     def coords_to_move(self, from_pos: Tuple[int, int], to_pos: Tuple[int, int]) -> str:
         """
@@ -469,6 +489,168 @@ class ShogiGame:
         self.position_history.pop()
         
         return True
+
+    
+    def evaluate_with_model(self, model, params):
+        """
+        SwinTransformerで局面を評価する
+        
+        Args:
+            model: SwinTransformerモデル
+            params: モデルパラメータ
+
+        Returns:
+            評価値（正の値はプレイヤーが有利、負の値は不利）
+        """
+
+        player = self.current_player
+            
+        # 現在の局面をゲーム状態として作成
+        game_state = {
+            'board': [row[:] for row in self.board],  # Deep copy
+            'hands': {k: v.copy() for k, v in self.captures.items()},  # Deep copy
+            'turn': player
+        }
+        
+        # SwinTransformerで評価
+        from src.model.actor_critic import predict_for_mcts
+        _, value = predict_for_mcts(model, params, game_state) #value is already a float
+        
+        # 詰みボーナスをチェック
+        checkmate_bonus = self._calculate_checkmate_bonus(player)
+        
+        return value + checkmate_bonus
+    
+    @staticmethod
+    def evaluate_batch(game_states, model, params):
+        """
+        複数の局面を同時に評価する（バッチ処理）
+        
+        Args:
+            game_states: ゲーム状態のリスト
+            model: SwinTransformerモデル  
+            params: モデルパラメータ
+            
+        Returns:
+            評価値のリスト
+        """
+        from src.model.actor_critic import predict_for_mcts
+        
+        values = []
+        for game_state in game_states:
+            _, value = predict_for_mcts(model, params, game_state)
+            values.append(float(value))
+            
+        return values
+    
+    @property
+    def game_state(self) -> Dict:
+        """
+        現在のゲーム状態を辞書として取得
+        
+        Returns:
+            ゲーム状態の辞書（board, hands, turn, is_terminal, is_checkmate）
+        """
+        return {
+            'board': [row[:] for row in self.board],  # Deep copy
+            'hands': {k: v.copy() for k, v in self.captures.items()},  # Deep copy
+            'turn': self.current_player,
+            'is_terminal': self.is_terminal,
+            'is_checkmate': self.is_checkmate()
+        }
+    
+    @property
+    def is_terminal(self) -> bool:
+        """ゲームが終了状態かどうか"""
+        return self.is_checkmate() or len(self.get_valid_moves()) == 0
+    
+    @property
+    def terminal_value(self) -> float:
+        """終了状態での価値を取得"""
+        if not self.is_terminal:
+            return 0.0
+            
+        if self.is_checkmate():
+            # 現在のプレイヤーが詰まされている = 負け
+            return -1.0
+        else:
+            # 引き分け
+            return 0.0
+
+    def _load_from_state(self, game_state: Dict):
+        """
+        ゲーム状態からインスタンスの状態を復元する
+        
+        Args:
+            game_state: 復元するゲーム状態
+        """
+        self.board = [row[:] for row in game_state['board']]
+        self.captures = {k: v.copy() for k, v in game_state['hands'].items()}
+        self.current_player = game_state['turn']
+
+    @classmethod
+    def apply_action_to_state(cls, action: str, game_state: Dict) -> Dict:
+        """
+        指定されたゲーム状態にアクションを適用して新しい状態を返す
+        
+        Args:
+            action: USI形式の手
+            game_state: 適用対象のゲーム状態
+
+        Returns:
+            新しいゲーム状態
+        """
+        # 共有インスタンスを使用
+        shared_game = cls.get_shared_instance()
+        shared_game._load_from_state(game_state)
+        
+        # アクションを適用
+        success = shared_game.move(action)
+        if not success:
+            raise ValueError(f"Invalid move: {action}")
+        
+        # 新しい状態を返す
+        return shared_game.game_state
+    
+    @classmethod
+    def get_valid_moves_from_state(cls, game_state: Dict) -> List[str]:
+        """
+        ゲーム状態から有効手のリストを取得
+        
+        Args:
+            game_state: ゲーム状態
+            
+        Returns:
+            有効手のリスト
+        """
+        # 共有インスタンスを使用
+        shared_game = cls.get_shared_instance()
+        shared_game._load_from_state(game_state)
+        return shared_game.get_valid_moves()
+
+    
+    def _calculate_checkmate_bonus(self, player): #TODO かぶってる（詰みの場合のボーナスがどこででも定義されてるConfigに追加して、統一しよう。
+        """詰みボーナスを計算"""
+        # 現在の手番を一時保存
+        original_player = self.current_player
+        
+        bonus = 0.0
+        
+        # 相手が詰んでいるかチェック
+        opponent = Player.GOTE if player == Player.SENTE else Player.SENTE
+        self.current_player = opponent
+        if self.is_checkmate():
+            bonus += 1000.0  # 相手を詰ませている場合は大きなプラス
+            
+        # 自分が詰んでいるかチェック  
+        self.current_player = player
+        if self.is_checkmate():
+            bonus -= 1000.0  # 自分が詰まされている場合は大きなマイナス
+            
+        # 手番を復元
+        self.current_player = original_player
+        
+        return bonus
     
     def __str__(self) -> str:
         """盤面の文字列表現"""

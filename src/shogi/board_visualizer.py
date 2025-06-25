@@ -55,58 +55,85 @@ class BoardVisualizer:
             output.write('+----+----+----+----+----+----+----+----+----+\n')
         
         # 手番表示
-        output.write(f"手番: {'先手(下)' if turn == Player.SENTE else '後手(上)'}\n")
+        output.write(f"手番: {'先手' if turn == Player.SENTE else '後手'}\n")
         
         # 持ち駒表示
         output.write('持ち駒:\n')
         
         # 先手の持ち駒
         sente_hand_str = '先手: '
+        gote_hand_str = '後手: '
+
         if Player.SENTE in hands:
             for piece_name, count in hands[Player.SENTE].items():
                 if count > 0:
                     piece = ShogiPiece(piece_name, Player.SENTE)
-                    symbol = piece.symbol
+                    symbol = piece.get_symbol(piece_name)
                     sente_hand_str += f'{symbol}{count} '
-        output.write(sente_hand_str + '\n')
         
-        # 後手の持ち駒
-        gote_hand_str = '後手: '
         if Player.GOTE in hands:
             for piece_name, count in hands[Player.GOTE].items():
                 if count > 0:
                     piece = ShogiPiece(piece_name, Player.GOTE)
-                    symbol = piece.symbol
+                    symbol = piece.get_symbol(piece_name)
                     gote_hand_str += f'{symbol}{count} '
+        
+        output.write(sente_hand_str + '\n')
         output.write(gote_hand_str + '\n')
         
         return output.getvalue()
     
     @classmethod
-    def visualize_board(cls, state: Dict) -> None:
+    def visualize_board(cls, state: Dict, model=None, params=None) -> None:
         """
         将棋の盤面をコンソールに表示する
         
         Args:
             state: 将棋環境の状態 (盤面、持ち駒、手番を含む)
+            model: SwinTransformerモデル（評価表示用、オプション）
+            params: モデルパラメータ（評価表示用、オプション）
         """
         board = state['board']
         hands = state['hands']
         turn = state['turn']
         
+        # 盤面表示
         print(cls.board_to_string(board, hands, turn))
+        
+        # 盤面評価表示（モデルは常に提供されていなければならない）
+        cls._display_position_evaluation(state)
+
     
     @classmethod
-    def visualize_game(cls, game) -> None:
+    def _display_position_evaluation(cls, state: Dict) -> None:
         """
-        ShogiGameオブジェクトの盤面をコンソールに表示する
+        SwinTransformerによる盤面評価を表示する
         
         Args:
-            game: ShogiGameオブジェクト
+            state: 将棋環境の状態
         """
-        state = {
-            'board': game.board,
-            'hands': game.captures,
-            'turn': game.current_player
-        }
-        cls.visualize_board(state) 
+        # state に evaluation は常にある
+        current_eval = state['evaluation']
+
+        
+        print("─" * 50)
+        print("🧠 SwinTransformer 局面評価:")
+        print(f"  手番側評価: {current_eval:+6.2f}")
+        
+        # 評価の解釈を表示
+        if abs(current_eval) >= 1000:
+            if current_eval > 0:
+                print(f"  → 手番側勝勢（詰みあり）")
+            else:
+                print(f"  → 手番側劣勢（詰まされている）")
+        elif current_eval > 10:
+            print(f"  → 手番側有利")
+        elif current_eval > 3:
+            print(f"  → 手番側やや有利") 
+        elif current_eval > -3:
+            print(f"  → 互角")
+        elif current_eval > -10:
+            print(f"  → 手番側やや不利")
+        else:
+            print(f"  → 手番側不利")
+        print("─" * 50) 

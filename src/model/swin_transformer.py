@@ -90,7 +90,7 @@ class SwinTransformerBlock(nn.Module):
         # shift_sizeを直接変更する代わりに、適切なshift_sizeを計算
         shift_size = self.shift_size
 
-        self.norm1 = self.norm_layer()
+        self.norm1 = self.norm_layer() if self.norm_layer is not None else nn.LayerNorm()
         self.attn = WindowAttention(
             dim=self.dim,
             window_size=(self.window_size, self.window_size),
@@ -99,7 +99,7 @@ class SwinTransformerBlock(nn.Module):
             attn_drop=self.attn_drop,
             proj_drop=self.drop,
         )
-        self.norm2 = self.norm_layer()
+        self.norm2 = self.norm_layer() if self.norm_layer is not None else nn.LayerNorm()
         mlp_hidden_dim = int(self.dim * self.mlp_ratio)
         self.mlp = MLP(hidden_dim=mlp_hidden_dim, out_dim=self.dim, dropout_rate=self.drop)
 
@@ -343,7 +343,7 @@ class PatchMerging(nn.Module):
         # パッチ結合係数の2乗倍の次元になる
         merge_factor_squared = self.patch_merge_factor * self.patch_merge_factor
         self.reduction = nn.Dense(merge_factor_squared * self.dim)
-        self.norm = self.norm_layer()
+        self.norm = self.norm_layer() if self.norm_layer is not None else nn.LayerNorm()
 
     def __call__(self, x):
         """

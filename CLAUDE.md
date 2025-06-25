@@ -62,6 +62,13 @@ Model hyperparameters are centralized in `config/default_config.py`:
 - Policy outputs: 2187 (9×9×27 for all possible moves)
 - Patch merge factor: 3 (shogi-specific, differs from standard Swin Transformer's factor of 2)
 
+MCTS hyperparameters:
+- Simulations: 400 (configurable)
+- Max depth: 200 (prevents infinite search)
+- C_PUCT: Dynamic calculation with init=1.25, base=19652
+- Exploration noise: Dirichlet(alpha=0.3) with epsilon=0.25
+- FPU reduction: 0.25 (First Play Urgency)
+
 ## Testing Strategy
 
 The project uses both internal tests (`src/tests/`) and standard external tests (`tests/`):
@@ -89,3 +96,24 @@ The project uses both internal tests (`src/tests/`) and standard external tests 
 - Policy output dimension accounts for all legal shogi moves including piece drops
 - MCTS uses domain-specific move generation from shogi rule engine
 - Training uses self-play to generate position-value pairs without requiring labeled data
+
+## MCTS Implementation
+
+The MCTS (`src/rl/mcts.py`) provides:
+- **Node Management**: MCTSNode class with PUCT selection and value backup
+- **Search Tree**: Efficient tree traversal with depth limits and terminal detection
+- **Neural Integration**: Seamless Actor-Critic prediction calls via `predict_for_mcts()`
+- **Game State Management**: Automatic ShogiGame state cloning and move application
+- **Exploration**: Dirichlet noise at root for training diversity
+- **Utilities**: `create_mcts()` and `mcts_search()` convenience functions
+
+Usage:
+```python
+# Simple search
+action_probs, search_info = mcts_search(model, params, game_state, n_simulations=100)
+
+# Advanced usage
+mcts = create_mcts(model, params, max_depth=50, c_puct=1.5)
+action_probs, root_node = mcts.search(game_state)
+selected_action = mcts.select_action(action_probs, temperature=0.0)
+```

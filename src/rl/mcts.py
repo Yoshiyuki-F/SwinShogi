@@ -1,182 +1,107 @@
 """
-モンテカルロ木探索（MCTS）の実装
+Monte Carlo Tree Search (MCTS) implementation for SwinShogi
 
-このモジュールでは、強化学習におけるMCTS（Monte Carlo Tree Search）アルゴリズムを実装しています。
-MCTSは、将棋のような複雑なゲームにおいて、状態空間を効率的に探索するための手法です。
+This module implements the MCTS algorithm that efficiently explores the shogi game state space.
+MCTS is used in conjunction with neural networks to guide search towards promising positions.
 """
 
 import math
 import numpy as np
-import os
-import sys
 from dataclasses import dataclass
-from typing import Dict, List, Tuple, Any
-
-# プロジェクトのルートディレクトリをPythonパスに追加
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
+from typing import Dict, List, Tuple, Any, Optional
 
 from config.default_config import MCTS_CONFIG
+from src.model.actor_critic import predict_for_mcts
 
 
 @dataclass
-class DiscreteActionConfig:
-    """離散行動空間の基本設定"""
-    action_num: int = MCTS_CONFIG['action_num']  # 行動空間の次元数（9x9の盤面 + 持ち駒の打ち先）
-
-
-@dataclass
-class MCTSConfig(DiscreteActionConfig):
-    """MCTSのハイパーパラメータ設定"""
-    simulation_times: int = MCTS_CONFIG['simulation_times']     # 1回の探索で実行するシミュレーション回数
-    expansion_threshold: int = MCTS_CONFIG['expansion_threshold']     # ノードを展開する訪問回数の閾値
-    gamma: float = MCTS_CONFIG['gamma']               # 割引率
-    uct_c: float = MCTS_CONFIG['uct_c']               # UCTの探索パラメータ
-    dirichlet_alpha: float = MCTS_CONFIG['dirichlet_alpha']     # ディリクレノイズのパラメータ
-    dirichlet_weight: float = MCTS_CONFIG['dirichlet_weight']   # ディリクレノイズの重み
-    value_weight: float = MCTS_CONFIG['value_weight']        # 価値と方策の重み付け（0.5で均等）
-
-        
-
-class MCTSParameter:
-    """MCTSの訪問回数と累積報酬を管理するクラス"""
+class MCTSConfig:
+    """MCTS hyperparameter configuration"""
+    n_simulations: int = MCTS_CONFIG['n_simulations']
+    c_puct: float = MCTS_CONFIG['uct_c']
+    max_depth: int = MCTS_CONFIG['max_depth']
+    min_visits_to_expand: int = MCTS_CONFIG['min_visits_to_expand']
     
-    def __init__(self):
-        self.N = {}  # 訪問回数 {state_key: [action_0_count, action_1_count, ...]}
-        self.W = {}  # 累積報酬 {state_key: [action_0_reward, action_1_reward, ...]}
-        self.Q = {}  # 平均報酬 {state_key: [action_0_value, action_1_value, ...]}
-        self.P = {}  # 方策確率 {state_key: [action_0_prob, action_1_prob, ...]}
+    # Exploration noise parameters
+    use_dirichlet_noise: bool = MCTS_CONFIG['use_dirichlet_noise']
+    exploration_noise_alpha: float = MCTS_CONFIG['exploration_noise_alpha']
+    exploration_noise_epsilon: float = MCTS_CONFIG['exploration_noise_epsilon']
     
-    def init_state(self, state_key, action_num, policy_probs=None):
-        """新しい状態を初期化する"""
-        if state_key not in self.N:
-            self.N[state_key] = [0 for _ in range(action_num)]
-            self.W[state_key] = [0.0 for _ in range(action_num)]
-            self.Q[state_key] = [0.0 for _ in range(action_num)]
-            
-            # 方策確率を初期化（指定がなければ一様分布）
-            if policy_probs is None:
-                self.P[state_key] = [1.0 / action_num for _ in range(action_num)]
-            else:
-                self.P[state_key] = policy_probs
-    
-    def update(self, state_key, action, reward):
-        """訪問回数と累積報酬を更新する"""
-        self.N[state_key][action] += 1
-        self.W[state_key][action] += reward
-        self.Q[state_key][action] = self.W[state_key][action] / self.N[state_key][action]
-    
-    def get_uct_value(self, state_key, action, parent_n, c_puct):
-        """UCT値を計算する"""
-        # Q値（exploitation）
-        q_value = self.Q[state_key][action]
-        
-        # P値と訪問回数に基づく探索項（exploration）
-        n = self.N[state_key][action]
-        p = self.P[state_key][action]
-        exploration = c_puct * p * math.sqrt(parent_n) / (1 + n)
-        
-        return q_value + exploration
-    
-    def select_action(self, state_key, parent_n, c_puct, temperature=1.0):
-        """UCT値に基づいてアクションを選択する"""
-        uct_values = [
-            self.get_uct_value(state_key, a, parent_n, c_puct)
-            for a in range(len(self.N[state_key]))
-        ]
-        
-        if temperature == 0:  # 最適行動を選択
-            return np.argmax(uct_values)
-        else:  # ソフトマックス選択
-            exp_values = np.exp(np.array(uct_values) / temperature)
-            probs = exp_values / np.sum(exp_values)
-            return np.random.choice(len(probs), p=probs)
-    
-    def get_action_probs(self, state_key, temperature=1.0):
-        """訪問回数に基づく行動確率を取得する"""
-        counts = np.array(self.N[state_key])
-        if temperature == 0:  # 決定論的に最大値を選択
-            best_actions = np.where(counts == np.max(counts))[0]
-            probs = np.zeros(len(counts))
-            probs[best_actions] = 1.0 / len(best_actions)
-        else:  # 温度付きソフトマックス
-            counts = counts ** (1.0 / temperature)
-            probs = counts / np.sum(counts)
-        
-        return probs
+    # Advanced PUCT parameters
+    c_puct_init: float = MCTS_CONFIG['c_puct_init']
+    c_puct_base: float = MCTS_CONFIG['c_puct_base']
+    fpu_reduction: float = MCTS_CONFIG['fpu_reduction']
 
 
 class MCTSNode:
-    """モンテカルロ木探索におけるノードを表すクラス"""
+    """Node in the Monte Carlo Tree Search tree"""
     
-    def __init__(self, prior: float = 0.0):
+    def __init__(self, prior: float = 0.0, parent: Optional['MCTSNode'] = None):
         """
-        ノードの初期化
+        Initialize MCTS node
         
         Args:
-            prior: このノードの事前確率（ニューラルネットワークによる予測値）
+            prior: Prior probability from neural network policy
+            parent: Parent node (None for root)
         """
-        self.visit_count = 0  # このノードへの訪問回数
-        self.value_sum = 0.0  # このノードの価値の合計
-        self.prior = prior    # 事前確率
-        self.children = {}    # 子ノード {action: MCTSNode}
-        self.reward = 0.0     # このノードに到達したときの即時報酬
-        self.expanded = False # このノードが展開されているかどうか
+        self.visit_count = 0
+        self.value_sum = 0.0
+        self.prior = prior
+        self.parent = parent
+        self.children: Dict[str, 'MCTSNode'] = {}
+        self.expanded = False
         
     @property
     def value(self) -> float:
-        """このノードの平均価値を返す"""
+        """Average value of this node"""
         if self.visit_count == 0:
             return 0.0
         return self.value_sum / self.visit_count
     
-    def expand(self, actions: List[Tuple], action_probs: Dict[Tuple, float], reward: float = 0.0):
+    def is_expanded(self) -> bool:
+        """Check if node has been expanded"""
+        return self.expanded
+    
+    def expand(self, action_priors: Dict[str, float]):
         """
-        ノードを展開する（可能な行動とその確率を設定）
+        Expand node with child nodes for valid actions
         
         Args:
-            actions: 可能な行動のリスト
-            action_probs: 行動とその確率の辞書
-            reward: このノードに到達したときの即時報酬
+            action_priors: Dictionary mapping actions to their prior probabilities
         """
         self.expanded = True
-        self.reward = reward
-        
-        for action in actions:
-            # 行動確率が0の場合はスキップ
-            if action not in action_probs or action_probs[action] == 0:
-                continue
-            # 子ノードを作成（行動確率を事前確率として設定）
-            self.children[action] = MCTSNode(prior=action_probs[action])
+        for action, prior in action_priors.items():
+            self.children[action] = MCTSNode(prior=prior, parent=self)
     
-    def select_child(self, c_puct: float) -> Tuple[Any, 'MCTSNode']:
+    def select_child(self) -> Tuple[str, 'MCTSNode']:
         """
-        UCB値に基づいて子ノードを選択する
+        Select child using PUCT algorithm
         
-        Args:
-            c_puct: 探索と活用のバランスを取るためのハイパーパラメータ
-            
         Returns:
-            (行動, 選択された子ノード)
+            Tuple of (action, child_node) with highest PUCT value
         """
-        # 訪問回数の平方根（exploration項に使用）
-        sqrt_sum_count = math.sqrt(self.visit_count)
-        
-        # UCB値が最大の行動を選択
         best_score = -float('inf')
         best_action = None
         best_child = None
         
+        # Calculate dynamic c_puct
+        c_puct = math.log((self.visit_count + MCTS_CONFIG['c_puct_base'] + 1) / MCTS_CONFIG['c_puct_base']) + MCTS_CONFIG['c_puct_init']
+        
         for action, child in self.children.items():
-            # UCB値の計算
-            # Q値（活用）+ C_PUCT × P(s,a) × √N(s) / (1 + N(s,a))
-            # Q値は子ノードから見た自分の価値なので、-child.valueとなる（ゲームは交互に手番）
-            exploit = -child.value  # 負の値は相手のノードから見た場合の逆転
-            explore = c_puct * child.prior * sqrt_sum_count / (1 + child.visit_count)
-            score = exploit + explore
+            # PUCT score calculation
+            q_value = -child.value  # Flip sign due to alternating players
             
-            # 最大スコアを更新
-            if score > best_score:
-                best_score = score
+            # First Play Urgency (FPU) - reduce score for unvisited nodes
+            if child.visit_count == 0:
+                q_value -= MCTS_CONFIG['fpu_reduction']
+            
+            # Upper confidence bound
+            exploration_score = c_puct * child.prior * math.sqrt(self.visit_count) / (1 + child.visit_count)
+            
+            puct_score = q_value + exploration_score
+            
+            if puct_score > best_score:
+                best_score = puct_score
                 best_action = action
                 best_child = child
         
@@ -184,267 +109,324 @@ class MCTSNode:
     
     def update(self, value: float):
         """
-        ノードの統計情報を更新する
+        Update node statistics with simulation result
         
         Args:
-            value: バックアップする価値
+            value: Value to backup
         """
         self.visit_count += 1
         self.value_sum += value
+    
+    def add_exploration_noise(self, noise_alpha: float = 0.3, noise_epsilon: float = 0.25):
+        """
+        Add Dirichlet noise to root node to encourage exploration
+        
+        Args:
+            noise_alpha: Alpha parameter for Dirichlet distribution
+            noise_epsilon: Fraction of noise to add to priors
+        """
+        if not self.children:
+            return
+        
+        actions = list(self.children.keys())
+        noise = np.random.dirichlet([noise_alpha] * len(actions))
+        
+        for action, noise_value in zip(actions, noise):
+            child = self.children[action]
+            child.prior = (1 - noise_epsilon) * child.prior + noise_epsilon * noise_value
 
 
 class MCTS:
-    """モンテカルロ木探索アルゴリズムの実装"""
+    """Monte Carlo Tree Search for SwinShogi"""
     
-    def __init__(self, game, actor_critic, c_puct=MCTS_CONFIG['uct_c'], n_simulations=MCTS_CONFIG['simulation_times'], 
-                dirichlet_alpha=MCTS_CONFIG['dirichlet_alpha'], exploration_fraction=MCTS_CONFIG['dirichlet_weight'], 
-                pb_c_init=MCTS_CONFIG['pb_c_init'], pb_c_base=MCTS_CONFIG['pb_c_base']):
+    def __init__(self, model, params, config: Optional[MCTSConfig] = None):
         """
-        MCTSの初期化
+        Initialize MCTS
         
         Args:
-            game: 将棋ゲームのインスタンス
-            actor_critic: 方策と価値を予測するニューラルネットワーク
-            c_puct: 探索と活用のバランスを取るためのハイパーパラメータ
-            n_simulations: 1回の探索で実行するシミュレーション回数
-            dirichlet_alpha: ディリクレノイズのアルファパラメータ
-            exploration_fraction: ルートノードにおけるエクスプロレーションノイズの割合
-            pb_c_init: PUCT計算のための初期係数
-            pb_c_base: PUCT計算のためのベース値
+            model: Neural network model for position evaluation
+            params: Model parameters
+            config: MCTS configuration parameters
         """
-        self.game = game
-        self.actor_critic = actor_critic
-        self.c_puct = c_puct
-        self.n_simulations = n_simulations
-        self.dirichlet_alpha = dirichlet_alpha
-        self.exploration_fraction = exploration_fraction
-        self.pb_c_init = pb_c_init
-        self.pb_c_base = pb_c_base
+        self.model = model
+        self.params = params
+        self.config = config or MCTSConfig()
         
-        # ルートノードの初期化
-        self.root = MCTSNode()
-        self.game_state = game.clone()  # 現在のゲーム状態
-        
-        # 探索開始時にルートノードを展開
-        self._expand_root_node()
-        
-    def _expand_root_node(self):
-        """ルートノードを展開"""
-        # 現在の状態の特徴量を取得
-        state_features = self.game_state.get_features()
-        
-        # 方策と価値を予測
-        action_probs, _ = self.actor_critic.predict(state_features)
-        
-        # 有効な行動のみを残す
-        valid_moves = self.game_state.get_valid_moves()
-        valid_action_probs = {a: action_probs.get(a, 0) for a in valid_moves}
-        
-        # 確率の正規化（合計を1にする）
-        if sum(valid_action_probs.values()) > 0:
-            norm_factor = sum(valid_action_probs.values())
-            valid_action_probs = {a: p / norm_factor for a, p in valid_action_probs.items()}
-        else:
-            # 全ての有効な行動に等しい確率を割り当てる
-            valid_action_probs = {a: 1.0 / len(valid_moves) for a in valid_moves}
-        
-        # ルートノードを展開
-        self.root.expand(valid_moves, valid_action_probs)
-
-    def search(self):
-        """
-        モンテカルロ木探索を実行する
-        
-        シーケンス図の探索ループ部分に対応
-        Returns:
-            最適な行動とその確率の辞書
-        """
-        # 探索回数分だけシミュレーションを実行
-        for i in range(self.n_simulations):
-            # ゲーム状態をクローン
-            sim_state = self.game_state.clone()
-            
-            # 選択、拡張、シミュレーション、バックプロパゲーション
-            # シーケンス図のループに対応
-            self._simulate_once(sim_state, self.root, 0)
-            
-        # 行動確率を計算
-        action_probs = {}
-        for action, child in self.root.children.items():
-            action_probs[action] = child.visit_count / self.root.visit_count
-            
-        return action_probs
+        # Search statistics
+        self.search_stats = {
+            'nodes_created': 0,
+            'leaf_evaluations': 0,
+            'max_depth_reached': 0
+        }
     
-    def _simulate_once(self, state, node: MCTSNode, depth: int) -> float:
+    def search(self, game_state: Dict, root_node: Optional[MCTSNode] = None) -> Tuple[Dict[str, float], MCTSNode]:
         """
-        1回のシミュレーションを実行する
+        Run MCTS search from given game state
         
         Args:
-            state: シミュレーション用のゲーム状態
-            node: 現在のノード
-            depth: 現在の深さ
+            game_state: Current shogi game state dict
+            root_node: Existing root node to continue search from (optional)
             
         Returns:
-            シミュレーション結果の価値（報酬）
+            Tuple of (action_probabilities, final_root_node)
         """
-        # 終端状態の場合は評価値を返す
-        if state.is_terminal():
-            return state.get_reward()
+        # Initialize or reuse root node
+        if root_node is None:
+            root_node = MCTSNode()
             
-        # ノードが展開されていない場合は展開
-        if not node.expanded:
-            # 新しいノードの評価要求（AC->Transformer->AC）
-            # シーケンス図のMCTS->AC部分
-            state_features = state.get_features()
-            action_probs, value = self.actor_critic.predict(state_features)
+        # Reset search statistics
+        self.search_stats = {'nodes_created': 0, 'leaf_evaluations': 0, 'max_depth_reached': 0}
+        
+        # Expand root node if not already expanded
+        if not root_node.is_expanded():
+            self._expand_node(root_node, game_state)
             
-            # 有効な行動のみを残す
-            valid_moves = state.get_valid_moves()
-            valid_action_probs = {a: action_probs.get(a, 0) for a in valid_moves}
+        # Add exploration noise to root
+        if self.config.use_dirichlet_noise:
+            root_node.add_exploration_noise(
+                self.config.exploration_noise_alpha,
+                self.config.exploration_noise_epsilon
+            )
+        
+        # Run simulations
+        for _ in range(self.config.n_simulations):
+            # Clone game state for simulation
+            sim_game_state = self._clone_game_state(game_state)
+            self._simulate(sim_game_state, root_node, depth=0)
+        
+        # Calculate action probabilities based on visit counts
+        action_probs = self._get_action_probabilities(root_node)
+        
+        return action_probs, root_node
+    
+    def _simulate(self, game_state: Dict, node: MCTSNode, depth: int) -> float:
+        """
+        Run single MCTS simulation
+        
+        Args:
+            game_state: Current game state
+            node: Current node in tree
+            depth: Current search depth
             
-            # 確率の正規化
-            if sum(valid_action_probs.values()) > 0:
-                norm_factor = sum(valid_action_probs.values())
-                valid_action_probs = {a: p / norm_factor for a, p in valid_action_probs.items()}
-            else:
-                valid_action_probs = {a: 1.0 / len(valid_moves) for a in valid_moves}
-            
-            # ノードを展開
-            node.expand(valid_moves, valid_action_probs)
-            
-            # 価値を返す（ニューラルネットワークからの予測値）
+        Returns:
+            Value estimate for this position
+        """
+        # Check depth limit
+        if depth >= self.config.max_depth:
+            return self._evaluate_position(game_state)
+        
+        # Check for terminal state
+        if game_state['is_terminal']:
+            return self._get_terminal_value(game_state)
+        
+        # Expand node if not expanded and has enough visits
+        if not node.is_expanded() and node.visit_count >= self.config.min_visits_to_expand:
+            value = self._expand_node(node, game_state)
+            node.update(value)
             return value
         
-        # 子ノード選択（UCB値に基づく最良の行動を選択）
-        action, child_node = node.select_child(self.c_puct)
+        # If node is not expanded (leaf node), evaluate with neural network
+        if not node.is_expanded():
+            value = self._evaluate_position(game_state)
+            node.update(value)
+            return value
         
-        # 選択した行動を実行
-        state.move(action)
+        # Select best child using PUCT
+        action, child_node = node.select_child()
         
-        # 再帰的にシミュレーション（深さを1増やす）
-        value = self._simulate_once(state, child_node, depth + 1)
+        # Apply action to game state
+        new_game_state = self._apply_action(game_state, action)
         
-        # バックプロパゲーション
-        # シーケンス図のバックプロパゲーション部分
-        node.update(-value)  # 価値を反転（相手側から見た価値なので）
+        # Recursively simulate
+        value = self._simulate(new_game_state, child_node, depth + 1)
         
-        return -value  # 価値を反転して返す
+        # Update statistics
+        self.search_stats['max_depth_reached'] = max(self.search_stats['max_depth_reached'], depth)
+        
+        # Backup value (flip sign for alternating players)
+        node.update(-value)
+        
+        return -value
     
-    def _backpropagate(self, action_history: List, value: float):
+    def _expand_node(self, node: MCTSNode, game_state: Dict) -> float:
         """
-        バックプロパゲーション処理
+        Expand node by evaluating position with neural network
         
         Args:
-            action_history: 行動の履歴
-            value: 最終的な価値
-        """
-        # こちらはシーケンス図には表示されていない詳細実装部分
-        # 試合で価値を順方向に伝播する
-        current_node = self.root
-        current_player = self.game_state.current_player
-        
-        for action in action_history:
-            # 現在のノードを更新
-            current_node.update(value if current_player == self.game_state.current_player else -value)
-            # 子ノードに移動
-            if action in current_node.children:
-                current_node = current_node.children[action]
-            else:
-                # 履歴に対応する子ノードがない場合は終了
-                break
-            # プレイヤーを交代
-            current_player = 1 - current_player
-
-    def get_action_probabilities(self, temperature=1.0):
-        """
-        探索結果から行動確率を計算する（最終的な行動選択用）
-        
-        Args:
-            temperature: 温度パラメータ（0に近いほど最適解に確定的）
+            node: Node to expand
+            game_state: Current game state
             
         Returns:
-            行動とその確率の辞書
+            Position value from neural network
         """
-        # 訪問回数を配列に変換
-        visits = {action: child.visit_count for action, child in self.root.children.items()}
+        # Get neural network evaluation
+        action_priors, value = predict_for_mcts(self.model, self.params, game_state)
         
-        if temperature == 0:  # 決定論的に選択
+        # Filter for valid moves only
+        from src.shogi.shogi_game import ShogiGame
+        valid_moves = ShogiGame.get_valid_moves_from_state(game_state)
+        from src.utils.action_utils import filter_valid_actions
+        valid_action_priors = filter_valid_actions(action_priors, valid_moves)
+        
+        # Expand node
+        node.expand(valid_action_priors)
+        
+        # Update statistics
+        self.search_stats['nodes_created'] += len(valid_action_priors)
+        self.search_stats['leaf_evaluations'] += 1
+        
+        return value
+    
+    def _evaluate_position(self, game_state: Dict) -> float:
+        """
+        Evaluate position using neural network
+        
+        Args:
+            game_state: Game state to evaluate
+            
+        Returns:
+            Position value estimate
+        """
+        _, value = predict_for_mcts(self.model, self.params, game_state)
+        self.search_stats['leaf_evaluations'] += 1
+        return value
+    
+    def _get_action_probabilities(self, root_node: MCTSNode, temperature: float = 1.0) -> Dict[str, float]:
+        """
+        Calculate action probabilities from visit counts
+        
+        Args:
+            root_node: Root node of search tree
+            temperature: Temperature for softmax (0 = deterministic)
+            
+        Returns:
+            Dictionary mapping actions to probabilities
+        """
+        if not root_node.children:
+            return {}
+        
+        # Get visit counts
+        visits = {action: child.visit_count for action, child in root_node.children.items()}
+        
+        if temperature == 0:
+            # Deterministic selection
             best_action = max(visits.items(), key=lambda x: x[1])[0]
-            action_probs = {action: 1.0 if action == best_action else 0.0 for action in visits}
-        else:  # 温度付きソフトマックス
-            visits_temp = {action: count ** (1.0 / temperature) for action, count in visits.items()}
-            total = sum(visits_temp.values())
-            action_probs = {action: count / total for action, count in visits_temp.items()}
+            return {action: 1.0 if action == best_action else 0.0 for action in visits}
+        else:
+            # Temperature-scaled probabilities
+            visit_counts = np.array(list(visits.values()))
+            if temperature != 1.0:
+                visit_counts = visit_counts ** (1.0 / temperature)
             
-        return action_probs
-
-    def select_action(self, temperature=0.0):
+            probabilities = visit_counts / np.sum(visit_counts)
+            return {action: prob for action, prob in zip(visits.keys(), probabilities)}
+    
+    def select_action(self, action_probs: Dict[str, float], temperature: float = 0.0) -> str:
         """
-        最適な行動を選択する（訪問回数に基づく確率分布）
+        Select action based on probabilities
         
         Args:
-            temperature: 温度パラメータ（探索のランダム性を制御）
+            action_probs: Action probabilities from search
+            temperature: Temperature for selection randomness
             
         Returns:
-            選択された行動
+            Selected action
         """
-        # シーケンス図の「最適手選択」部分に対応
-        # MCTSから確率分布を取得
-        action_probs = self.get_action_probabilities(temperature)
+        if not action_probs:
+            raise ValueError("No actions available")
         
-        if temperature == 0:  # 決定論的に選択
-            best_action = max(action_probs.items(), key=lambda x: x[1])[0]
-            return best_action
-        else:  # 確率的に選択
+        if temperature == 0:
+            # Deterministic selection
+            return max(action_probs.items(), key=lambda x: x[1])[0]
+        else:
+            # Stochastic selection
             actions = list(action_probs.keys())
             probs = list(action_probs.values())
+            
+            # Apply temperature
+            if temperature != 1.0:
+                probs = np.array(probs) ** (1.0 / temperature)
+                probs = probs / np.sum(probs)
+            
             return np.random.choice(actions, p=probs)
     
-    def update_with_move(self, action):
-        """
-        指定した行動でゲーム状態と探索木を更新する
-        
-        Args:
-            action: 実行する行動
-        """
-        # 指定された行動に対応する子ノードが存在するか確認
-        if action in self.root.children:
-            # 子ノードをルートにする（部分木を再利用）
-            self.root = self.root.children[action]
-            self.root.parent = None  # 親への参照を切る
-        else:
-            # 対応する子ノードがない場合は新しいルートノードを作成
-            self.root = MCTSNode()
-        
-        # ゲーム状態を更新
-        self.game_state.move(action)
-        
-        # ルートノードが展開されていない場合は展開
-        if not self.root.expanded:
-            self._expand_root_node()
+    # Helper methods for game state management
+    def _clone_game_state(self, game_state: Dict) -> Dict:
+        """Create deep copy of game state"""
+        import copy
+        return copy.deepcopy(game_state)
+
     
-    def add_exploration_noise(self):
-        """ルートノードにディリクレノイズを追加（探索を促進）"""
-        actions = list(self.root.children.keys())
-        noise = np.random.dirichlet([self.dirichlet_alpha] * len(actions))
+    def _apply_action(self, game_state: Dict, action: str) -> Dict:
+        """Apply action to game state and return new state"""
+        from src.shogi.shogi_game import ShogiGame
+        return ShogiGame.apply_action_to_state(action, game_state)
+
+
+    def _get_terminal_value(self, game_state: Dict) -> float:
+        """Get value for terminal game state using SwinTransformer evaluation"""
+        from src.model.actor_critic import predict_for_mcts
         
-        # ノイズを追加（exploration_fractionの割合で混合）
-        for i, action in enumerate(actions):
-            child = self.root.children[action]
-            child.prior = (1 - self.exploration_fraction) * child.prior + self.exploration_fraction * noise[i]
+        # Use SwinTransformer evaluation directly on game_state
+        # This gives more nuanced values than just -1/0/1
+        _, value = predict_for_mcts(self.model, self.params, game_state)
+        return float(value)
+
+    def _move_to_action_index(self, move: str) -> int:
+        """Convert USI move string to action index"""
+        from src.utils.action_utils import action_to_index
+        return action_to_index(move)
+    
+    def get_search_info(self) -> Dict[str, Any]:
+        """Get information about the last search"""
+        return {
+            'nodes_created': self.search_stats['nodes_created'],
+            'leaf_evaluations': self.search_stats['leaf_evaluations'],
+            'max_depth_reached': self.search_stats['max_depth_reached'],
+            'simulations_run': self.config.n_simulations
+        }
 
 
+# Utility functions for easier integration
+def create_mcts(model, params, **config_overrides) -> MCTS:
+    """
+    Create MCTS instance with custom configuration
+    
+    Args:
+        model: Neural network model
+        params: Model parameters
+        **config_overrides: Override default MCTS configuration
+        
+    Returns:
+        Configured MCTS instance
+    """
+    config_dict = MCTS_CONFIG.copy()
+    config_dict.update(config_overrides)
+    
+    # Create config object with overrides
+    config = MCTSConfig(**{k: v for k, v in config_dict.items() if k in MCTSConfig.__dataclass_fields__})
+    
+    return MCTS(model, params, config)
 
 
-class MCTSTrainer:
-    """強化学習のトレーナー基底クラス"""
-    #TODO trainer.py
-
-    def __init__(self, parameter, remote_memory=None):
-        self.parameter = parameter
-        self.remote_memory = remote_memory
-        self.train_count = 0
-
-    def train(self):
-        """モデルを訓練する"""
-        raise NotImplementedError("サブクラスで実装する必要があります")
+def mcts_search(model, params, game_state: Dict, n_simulations: int = None) -> Tuple[Dict[str, float], Dict[str, Any]]:
+    """
+    Convenient function to run MCTS search
+    
+    Args:
+        model: Neural network model
+        params: Model parameters
+        game_state: Current game state
+        n_simulations: Number of simulations (uses config default if None)
+        
+    Returns:
+        Tuple of (action_probabilities, search_info)
+    """
+    config_overrides = {}
+    if n_simulations is not None:
+        config_overrides['n_simulations'] = n_simulations
+    
+    mcts = create_mcts(model, params, **config_overrides)
+    action_probs, _ = mcts.search(game_state)
+    
+    return action_probs, mcts.get_search_info()
