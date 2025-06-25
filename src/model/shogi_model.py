@@ -196,27 +196,3 @@ class SwinShogiModel(flax.linen.Module):
         with open(path, 'rb') as f:
             loaded_params = flax.serialization.from_bytes(params, f.read())
         return loaded_params
-
-
-def create_swin_shogi_model(rng, model_config=None, batch_size=1):
-    """SwinShogiモデルの作成"""
-    from config.default_config import get_model_config
-    
-    if model_config is None:
-        model_config = get_model_config()
-    
-    model = SwinShogiModel(model_config=model_config)
-    
-    # モデルパラメータを初期化（盤面入力と特徴ベクトルを使用）
-    input_shape = (batch_size, model_config.img_size[0], model_config.img_size[1], model_config.in_chans)
-    feature_shape = (batch_size, model_config.feature_dim)  # 手番と持ち駒の特徴ベクトル
-    
-    # 特徴ベクトルを含むモデルの初期化
-    params = model.init(rng, jnp.ones(input_shape), feature_vector=jnp.ones(feature_shape))
-    
-    return model, params 
-
-
-# モデルの作成・推論関連の関数はsrc/utils/model_utils.pyに移動しました
-# テスト関数はsrc/tests/test_swin_shogi.pyに移動しました
-# from src.utils.model_utils import  predict, inference_jit, cross_entropy_loss, policy_gradient_loss

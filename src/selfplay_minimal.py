@@ -11,10 +11,8 @@ import logging
 # Add project root to path
 sys.path.insert(0, os.path.abspath('..'))
 
-from src.rl.self_play import create_self_play
-from src.model.shogi_model import create_swin_shogi_model
-from config.default_config import get_model_config, get_mcts_config
-from src.shogi.board_visualizer import BoardVisualizer
+
+from config.default_config import get_model_config
 
 # Set up logging
 logging.basicConfig(

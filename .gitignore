@@ -3,3 +3,16 @@ __pycache__/
 *$py.class
 .idea/
 .claude
+
+# Large data files and checkpoints
+data/checkpoints/*.pkl
+data/test_checkpoints/
+*.pkl
+*.npy
+*.h5
+*.hdf5
+
+# Model weights and large training artifacts
+models/
+weights/
+logs/
