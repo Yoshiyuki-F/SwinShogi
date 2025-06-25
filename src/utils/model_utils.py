@@ -108,3 +108,38 @@ class PolicyGradientLoss:
         total_loss = policy_loss + value_loss + entropy_coeff * entropy_loss
             
         return total_loss, (policy_loss, value_loss, entropy_loss)
+    
+    @staticmethod
+    @jax.jit
+    def compute_alphazero_losses(policy_logits: jnp.ndarray, values: jnp.ndarray, 
+                               action_probs: jnp.ndarray, target_values: jnp.ndarray, 
+                               entropy_coeff: float = 0.01) -> Tuple[jnp.ndarray, Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]]:
+        """
+        AlphaZero-style loss computation without advantages
+        
+        Uses standard cross-entropy loss for policy (no advantage weighting)
+        and MSE loss for values, following AlphaZero paper.
+        
+        Args:
+            policy_logits: Model policy output
+            values: Model value output  
+            action_probs: Target action probabilities from MCTS
+            target_values: Target values from game outcomes
+            entropy_coeff: Entropy coefficient for exploration
+            
+        Returns:
+            (total_loss, (policy_loss, value_loss, entropy_loss)): Tuple of loss values
+        """
+        # Policy loss: standard cross-entropy (no advantages)
+        policy_loss = PolicyGradientLoss.policy_loss(policy_logits, action_probs, advantages=None)
+        
+        # Value loss: MSE
+        value_loss = PolicyGradientLoss.value_loss(values, target_values)
+        
+        # Entropy loss: for exploration
+        entropy_loss = PolicyGradientLoss.entropy_loss(policy_logits)
+        
+        # Total loss (no separate coefficients as they're applied externally)
+        total_loss = policy_loss + value_loss + entropy_coeff * entropy_loss
+        
+        return total_loss, (policy_loss, value_loss, entropy_loss)

@@ -9,13 +9,13 @@ This module provides flexible data generation from various sources:
 """
 
 import logging
-from typing import List, Dict, Any, Optional, Union
+from typing import List, Dict, Any
 from dataclasses import dataclass
 from abc import ABC, abstractmethod
 
 import jax.numpy as jnp
 
-from src.rl.self_play import SelfPlay, SelfPlayResult
+from src.rl.self_play import SelfPlay
 from src.shogi.shogi_game import ShogiGame
 from src.shogi.board_encoder import encode_board_state, get_feature_vector
 
@@ -46,35 +46,30 @@ class DataSource(ABC):
         pass
 
 
+from src.model.actor_critic import ActorCritic
+
 class SelfPlayDataSource(DataSource):
     """Self-play data source"""
     
-    def __init__(self, self_play: SelfPlay):
-        self.self_play = self_play
+    def __init__(self, actor_critic: ActorCritic, mcts_config: dict):
+        self.self_play = SelfPlay(actor_critic, mcts_config)
     
     def generate_data(self, num_games: int) -> List[TrainingExample]:
         """Generate data from self-play games"""
         logger.info(f"Generating {num_games} self-play games...")
         
-        # Use the existing generate_training_data function from self_play.py
-        from src.rl.self_play import generate_training_data
-        training_data, stats = generate_training_data(
-            self.self_play.model, 
-            self.self_play.params, 
-            num_games
-        )
+        results = [self.self_play.play_game() for _ in range(num_games)]
         
-        # Convert to TrainingExample format
         examples = []
-        for data in training_data:
-            example = TrainingExample(
-                board_state=data['board_state'],
-                feature_vector=data['feature_vector'],
-                action_probs=data['action_probs'],
-                value=data['value'],
-                player=data['player']
-            )
-            examples.append(example)
+        for result in results:
+            for ex in result.examples:
+                examples.append(TrainingExample(
+                    board_state=ex.observation,
+                    feature_vector=jnp.zeros(15), # Placeholder, as observation now contains all info
+                    action_probs=ex.action_probs,
+                    value=ex.outcome,
+                    player=0 # Placeholder, player info is implicitly handled by outcome
+                ))
         
         logger.info(f"Generated {len(examples)} training examples from self-play")
         return examples
@@ -87,9 +82,8 @@ class SelfPlayDataSource(DataSource):
 class GameRecordDataSource(DataSource):
     """Data source from recorded games (USI format, PGN, etc.)"""
     
-    def __init__(self, model, params):
-        self.model = model
-        self.params = params
+    def __init__(self, actor_critic: ActorCritic):
+        self.actor_critic = actor_critic
         self.games_processed = 0
     
     def generate_data(self, game_records: List[List[str]]) -> List[TrainingExample]:
@@ -126,7 +120,7 @@ class GameRecordDataSource(DataSource):
             feature_vector = get_feature_vector(game_state)
             
             # Get model evaluation for this position
-            position_value = game.evaluate_with_model(self.model, self.params)
+            position_value = game.evaluate_with_model(self.actor_critic.model, self.actor_critic.params)
             
             # Create dummy action probabilities (uniform over valid moves)
             # In practice, you might want to use a stronger policy or search
@@ -170,9 +164,8 @@ class GameRecordDataSource(DataSource):
 class AIOpponentDataSource(DataSource):
     """Data source from games against other AI engines"""
     
-    def __init__(self, model, params, opponent_engine_path: str):
-        self.model = model
-        self.params = params
+    def __init__(self, actor_critic: ActorCritic, opponent_engine_path: str):
+        self.actor_critic = actor_critic
         self.opponent_engine_path = opponent_engine_path
         self.games_played = 0
     
@@ -321,18 +314,17 @@ class DataGenerationManager:
 
 
 # Convenience functions
-def create_self_play_data_source(model, params, **config_overrides) -> SelfPlayDataSource:
+def create_self_play_data_source(actor_critic: ActorCritic, **config_overrides) -> SelfPlayDataSource:
     """Create self-play data source"""
-    from src.rl.self_play import create_self_play
-    self_play = create_self_play(model, params, **config_overrides)
-    return SelfPlayDataSource(self_play)
+    mcts_config = config_overrides.get('mcts_config', {})
+    return SelfPlayDataSource(actor_critic, mcts_config)
 
 
-def create_game_record_data_source(model, params) -> GameRecordDataSource:
+def create_game_record_data_source(actor_critic: ActorCritic) -> GameRecordDataSource:
     """Create game record data source"""
-    return GameRecordDataSource(model, params)
+    return GameRecordDataSource(actor_critic)
 
 
-def create_ai_opponent_data_source(model, params, opponent_engine_path: str) -> AIOpponentDataSource:
+def create_ai_opponent_data_source(actor_critic: ActorCritic, opponent_engine_path: str) -> AIOpponentDataSource:
     """Create AI opponent data source"""
-    return AIOpponentDataSource(model, params, opponent_engine_path)
+    return AIOpponentDataSource(actor_critic, opponent_engine_path)

@@ -82,7 +82,16 @@ SwinShogi/
 
 - **trainer.py**: モデルトレーニングクラス
   - `Trainer`: 強化学習トレーニングのメインクラス
+  - `Trainer.create()`: ファクトリーメソッドによる統一された初期化（チェックポイント自動検出・リジューム対応）
   - `TrainState`: パラメータと最適化器の状態を管理
+  - `ReplayBuffer`: 訓練例のリプレイバッファ
+
+- **data_generator.py**: 多様なデータソースからの訓練データ生成
+  - `DataGenerationManager`: 複数データソースの統合管理
+  - `SelfPlayDataSource`: 自己対戦データ生成
+  - `GameRecordDataSource`: 棋譜からのデータ生成
+  - `AIOpponentDataSource`: 他AI対戦データ生成
+  - ActorCritic中心の設計によりパラメータ同期を保証
 
 - **mcts.py**: モンテカルロ木探索の実装
   - `MCTS`: 探索木を管理し、最適な手を選択
@@ -107,11 +116,11 @@ SwinShogi/
   - `predict`: 将棋の状態からモデル推論を実行
   - `inference_jit`: JIT最適化された推論関数
   - `PolicyGradientLoss`: 方策勾配法で使用する損失関数集
-    - `cross_entropy_loss`: 基本的な交差エントロピー損失
-    - `policy_loss`: アドバンテージ重み付き損失（オプション）
+    - `policy_loss`: アドバンテージ対応の方策損失（None時は標準交差エントロピー）
     - `value_loss`: 価値関数の二乗誤差損失
     - `entropy_loss`: 方策のエントロピー損失
-    - `compute_losses_from_model_outputs`: 総合損失計算関数
+    - `compute_losses_from_model_outputs`: 汎用損失計算関数（Advantage対応）
+    - `compute_alphazero_losses`: AlphaZero専用損失関数（Advantageなし）
   - 勾配処理関数群
     - `calculate_gradient_norm`: 勾配のグローバルノルム計算
     - `clip_gradients`: 勾配のクリッピング
@@ -141,40 +150,104 @@ SwinShogi/
 
 ## 実装内容
 
-1. **損失関数の整理と統合**
+1. **Trainerファクトリーパターンの実装**
+   - `Trainer.create()`クラスメソッドによる統一された初期化インターフェース
+   - チェックポイント自動検出・リジューム機能
+   - 新規作成とチェックポイントからの復元の透明な切り替え
+
+2. **データ生成アーキテクチャの改善**
+   - `DataGenerationManager`による複数データソースの統合管理
+   - ActorCritic中心設計によるモデルパラメータの一元管理
+   - パラメータ更新時の自動同期保証
+
+3. **AlphaZero損失関数の最適化**
+   - `compute_alphazero_losses`関数でAdvantageを使わないAlphaZeroスタイル学習
+   - 従来の`compute_losses_from_model_outputs`も保持し互換性確保
+   - 方策損失の正しい計算によるモデル学習の修復
+
+4. **損失関数の整理と統合**
    - `PolicyGradientLoss`クラスに全ての損失関数を集約
    - `policy_loss`関数を柔軟化し、アドバンテージありなしの両方に対応
-   - `compute_losses_from_model_outputs`メソッドで損失計算ロジックを抽象化
+   - 損失計算ロジックの抽象化
 
-2. **勾配計算ロジックの最適化**
+5. **勾配計算ロジックの最適化**
    - 勾配計算とクリッピングのロジックを`model_utils.py`に移動
    - `calculate_gradient_norm`, `clip_gradients`, `process_gradients`関数の追加
-   - `trainer.py`の`loss_fn`関数を簡素化
+   - `trainer.py`の簡素化
 
-3. **モデル推論の最適化**
+6. **モデル推論の最適化**
    - JAXのJIT最適化による推論速度の向上
    - バッチ処理による効率的な計算
 
-4. **USIインターフェース**
+7. **USIインターフェース**
    - 将棋エンジン通信プロトコル対応
    - SFEN形式対応
    - 外部エンジン対戦機能
 
-5. **評価システム**
+8. **評価システム**
    - 自己対局評価
    - 外部エンジン対戦評価
 
-6. **将棋ルール**
+9. **将棋ルール**
    - 打ち歩詰め禁止
    - 王手判定
    - 詰み判定
    - 千日手検出 
 
-7. **テスト体制の整備**
-   - 標準的なPythonテスト構造（`tests/`ディレクトリ）への移行
-   - ユニットテストの拡充（MCTSテスト、モデルテスト）
-   - 統合テストスクリプトの作成（`scripts/run_integration_test.sh`）
-   - シーケンス図に沿った連携テストの実装
+10. **テスト体制の整備**
+    - 標準的なPythonテスト構造（`tests/`ディレクトリ）への移行
+    - ユニットテストの拡充（MCTSテスト、モデルテスト）
+    - 統合テストスクリプトの作成（`scripts/run_integration_test.sh`）
+    - シーケンス図に沿った連携テストの実装
+
+## 使用方法
+
+### 基本的なトレーニング
+
+```python
+# 新規トレーニング開始
+from src.rl.trainer import Trainer
+
+trainer = Trainer.create()
+trainer.train(num_iterations=100)
+```
+
+### チェックポイントからの再開
+
+```python
+# 特定のチェックポイントから再開
+trainer = Trainer.create(resume_from='data/checkpoints/checkpoint_step_50_20231201_120000')
+
+# 最新のチェックポイントから自動再開（存在する場合）
+trainer = Trainer.create()  # 自動的に最新を検出
+```
+
+### 複数データソースでのトレーニング
+
+```python
+# 棋譜データを追加
+trainer.add_data_source('game_records')
+trainer.generate_from_game_records(game_records_list)
+
+# 他AI対戦データを追加
+trainer.add_data_source('ai_opponent', opponent_engine_path='path/to/engine')
+```
+
+## アーキテクチャの改善点
+
+### 1. パラメータ管理の一元化
+- `ActorCritic`クラスがモデルとパラメータの唯一の管理点
+- データ生成時に常に最新のパラメータが使用される
+- パラメータ更新の自動同期
+
+### 2. ファクトリーパターンによる初期化
+- `Trainer.create()`による統一されたインターフェース
+- チェックポイント処理の複雑さを隠蔽
+- 新規作成とリジュームの透明な切り替え
+
+### 3. AlphaZero準拠の損失関数
+- Advantageを使わない純粋なAlphaZeroスタイル学習
+- 方策損失の正しい計算による学習効果の改善
 
 ## TODO
 ✅ **完了済み**: 
@@ -182,18 +255,19 @@ SwinShogi/
 - generate_self_play_data がtrainer.pyにあるのはおかしい？ほかのAI と戦ったときにもTrainingしたい → `DataGenerationManager`で解決済み  
 - def is_terminal と def _get_terminal_value で temp_gameを使っている問題 → 共有インスタンスで解決済み
 - self_play.pyに定義されている大量のDef（ほかのAIと戦ったときに使えない）を他のファイルに移動 → `game_utils.py`と`training_utils.py`で解決済み
+- DataGenerationManagerの設計問題（パラメータ更新時の同期） → ActorCritic中心設計で解決済み
+- Loss関数のadvantages引数問題 → AlphaZero専用損失関数で解決済み
+- Trainer初期化の複雑さ → ファクトリーパターンで解決済み
 
-## リファクタリング完了
+## アーキテクチャリファクタリング完了
 
-全ての主要なTODOが完了しました！
+全ての主要なアーキテクチャ改善が完了しました！
 
-### 新しく作成されたモジュール:
-- **`src/rl/game_utils.py`**: ゲーム共通ユーティリティ（温度調整、勝敗判定、統計管理など）
-- **`src/rl/training_utils.py`**: 訓練データ変換ユーティリティ（結果→訓練例変換、ログ出力など）
-
-### 改善点:
-- ✅ コードの重複削除
-- ✅ 他のAI対戦時でも使える汎用的な関数群
-- ✅ self_play.pyの簡素化
-- ✅ 将来のAI対戦実装に向けた基盤整備
+### 主要な改善:
+- ✅ ActorCritic中心のパラメータ管理
+- ✅ ファクトリーパターンによる初期化統一
+- ✅ AlphaZero準拠の損失関数実装
+- ✅ データ生成アーキテクチャの最適化
+- ✅ チェックポイント自動管理
+- ✅ コードの保守性と拡張性の向上
  

@@ -8,19 +8,16 @@ with neural network training using policy gradient methods.
 import jax
 import jax.numpy as jnp
 import optax
-import pickle
 import numpy as np
 import time
 import logging
-from pathlib import Path
 from typing import Dict, List, Any, Optional
 from collections import deque
 
 from src.utils.model_utils import PolicyGradientLoss
-from src.utils.checkpoint import CheckpointManager, save_model_checkpoint, load_model_checkpoint
+from src.utils.checkpoint import CheckpointManager
 from src.model.shogi_model import create_swin_shogi_model
 from src.model.actor_critic import ActorCritic
-from src.rl.mcts import MCTS
 from src.rl.self_play import SelfPlay
 from src.rl.data_generator import (
     DataGenerationManager, TrainingExample, 
@@ -99,130 +96,111 @@ class Trainer:
     """Main trainer class for SwinShogi"""
     
     def __init__(self, 
-                 model=None, 
-                 params=None,
+                 model: Any, 
+                 params: Any,
                  config: Optional[TrainingConfig] = None,
-                 checkpoint_dir: str = "data/checkpoints",
-                 resume_from_checkpoint: Optional[str] = None):
-        """
-        Initialize trainer
-        
-        Args:
-            model: SwinShogi model (created if None)
-            params: Model parameters (created if None)
-            config: Training configuration
-            checkpoint_dir: Directory to save/load checkpoints
-            resume_from_checkpoint: Path to checkpoint to resume from
-        """
+                 checkpoint_dir: str = "data/checkpoints"):
         self.config = config or get_training_config()
         self.checkpoint_manager = CheckpointManager(checkpoint_dir)
-        
-        # Try to resume from checkpoint
-        if resume_from_checkpoint or (model is None and params is None):
-            try:
-                checkpoint_path = resume_from_checkpoint
-                if resume_from_checkpoint is None:
-                    # Try to load latest checkpoint
-                    checkpoints = self.checkpoint_manager.list_checkpoints()
-                    if checkpoints:
-                        checkpoint_path = checkpoints[-1]['path']  # Latest checkpoint
-                        logger.info(f"Found existing checkpoint: {checkpoint_path}")
-                
-                if checkpoint_path:
-                    params, optimizer_state, metadata = self.checkpoint_manager.load_checkpoint(
-                        checkpoint_path, load_optimizer_state=True
-                    )
-                    
-                    # Create model if not provided
-                    if model is None:
-                        rng = jax.random.PRNGKey(42)
-                        model_config = get_model_config()
-                        model, _ = create_swin_shogi_model(rng, model_config)
-                    
-                    logger.info(f"Resumed from checkpoint at step {metadata.get('step', 0)}")
-                    self.start_step = metadata.get('step', 0)
-                    self.resume_optimizer_state = optimizer_state
-                else:
-                    raise FileNotFoundError("No checkpoint found")
-                    
-            except FileNotFoundError:
-                if resume_from_checkpoint:
-                    raise FileNotFoundError(f"Checkpoint not found: {resume_from_checkpoint}")
-                
-                # Create new model
-                logger.info("No existing checkpoint found, creating new model")
-                rng = jax.random.PRNGKey(42)
-                model_config = get_model_config()
-                model, params = create_swin_shogi_model(rng, model_config)
-                self.start_step = 0
-                self.resume_optimizer_state = None
-        else:
-            # Use provided model and parameters
-            self.start_step = 0
-            self.resume_optimizer_state = None
-            
         self.model = model
+
+        # The ActorCritic is the single source of truth for the model and its parameters.
         self.actor_critic = ActorCritic(model, params)
-        
-        # Initialize optimizer
-        self.optimizer = self._create_optimizer()
-        
-        # Use resume optimizer state if available
-        if self.resume_optimizer_state is not None:
-            optimizer_state = self.resume_optimizer_state
-        else:
-            optimizer_state = self.optimizer.init(params)
-            
-        self.train_state = TrainState(
-            params=params,
-            optimizer_state=optimizer_state
-        )
-        
-        # Initialize replay buffer
-        self.replay_buffer = ReplayBuffer(self.config.replay_buffer_size)
-        
-        # Initialize MCTS for self-play
-        mcts_config = get_mcts_config()
-        mcts_config.n_simulations = self.config.mcts_simulations
-        self.mcts = MCTS(model, params, mcts_config)
-        
-        # Initialize self-play
-        self.self_play = SelfPlay(
-            model, 
-            params, 
-            mcts_config,
-            max_moves=self.config.max_moves,
-            temperature_threshold=self.config.temperature_threshold,
-            temperature_init=self.config.temperature_init,
-            temperature_final=self.config.temperature_final
-        )
+
+        # The SelfPlay module gets the ActorCritic instance directly.
+        self.self_play = SelfPlay(self.actor_critic, get_mcts_config())
         
         # Initialize data generation manager
         self.data_manager = DataGenerationManager()
+        # Add default self-play data source
+        self.data_manager.add_data_source(create_self_play_data_source(self.actor_critic))
+
+        self.optimizer = self._create_optimizer()
+        optimizer_state = self.optimizer.init(params)
+
+        self.train_state = TrainState(params=params, optimizer_state=optimizer_state)
+        self.replay_buffer = ReplayBuffer(self.config.replay_buffer_size)
         
-        # Add self-play data source by default
-        self_play_source = create_self_play_data_source(model, params, 
-                                                       n_simulations=self.config.mcts_simulations)
-        self.data_manager.add_data_source(self_play_source)
-        
-        # Training statistics
         self.training_stats = {
             'iteration': 0,
             'total_games': 0,
-            'avg_game_length': 0.0,
+            'buffer_size': 0,
             'policy_loss': 0.0,
-            'value_loss': 0.0,
+            'value_loss': 0.0, 
             'entropy_loss': 0.0,
-            'total_loss': 0.0,
-            'learning_rate': self.config.learning_rate,
-            'buffer_size': 0
+            'total_loss': 0.0
         }
         
-        # JIT compile training functions
+        self.start_step = 0
+        
         self._loss_fn = jax.jit(self._loss_fn_impl)
         self._train_step = jax.jit(self._train_step_impl)
+    
+    @classmethod
+    def create(cls, 
+               config: Optional[TrainingConfig] = None,
+               checkpoint_dir: str = "data/checkpoints",
+               resume_from: Optional[str] = None) -> 'Trainer':
+        """
+        Creates and initializes a Trainer instance, handling new creation and checkpoint resumption.
         
-        logger.info(f"Trainer initialized with config: {self.config}")
+        Args:
+            config: Training configuration (uses default if None)
+            checkpoint_dir: Directory for checkpoints
+            resume_from: Specific checkpoint path to resume from (auto-detects latest if None)
+            
+        Returns:
+            Initialized Trainer instance
+        """
+        logger.info("Creating trainer...")
+        config = config or get_training_config()
+        checkpoint_manager = CheckpointManager(checkpoint_dir)
+        
+        # Determine the checkpoint to load from
+        checkpoint_path = resume_from
+        if checkpoint_path is None:
+            latest_path = checkpoint_manager.checkpoint_dir / "latest"
+            if latest_path.exists():
+                logger.info(f"No specific checkpoint provided, resuming from latest")
+                checkpoint_path = str(latest_path)
+
+        if checkpoint_path:
+            # --- Resume from checkpoint ---
+            logger.info(f"Loading checkpoint from: {checkpoint_path}")
+            try:
+                # Load params and optimizer state
+                params, opt_state, metadata = checkpoint_manager.load_checkpoint(
+                    checkpoint_path, load_optimizer_state=True
+                )
+                
+                # Create a dummy model to get the structure, then use loaded params
+                rng_key = jax.random.PRNGKey(42)
+                model, _ = create_swin_shogi_model(rng_key, get_model_config())
+                
+                trainer = cls(model=model, params=params, config=config, checkpoint_dir=checkpoint_dir)
+                
+                # Restore optimizer state and training step
+                trainer.train_state.optimizer_state = opt_state
+                trainer.train_state.step = metadata.get('step', 0)
+                trainer.start_step = trainer.train_state.step
+                
+                # Restore training stats if available
+                if 'training_stats' in metadata:
+                    trainer.training_stats = metadata['training_stats']
+                
+                logger.info(f"Successfully resumed from step {trainer.start_step}")
+                
+            except FileNotFoundError:
+                logger.error(f"Checkpoint not found at {checkpoint_path}. Aborting.")
+                raise
+        else:
+            # --- Create from scratch ---
+            logger.info("No checkpoint found. Creating new model and trainer.")
+            rng_key = jax.random.PRNGKey(42)
+            model, params = create_swin_shogi_model(rng_key, get_model_config())
+            trainer = cls(model=model, params=params, config=config, checkpoint_dir=checkpoint_dir)
+
+        return trainer
     
     def _create_optimizer(self):
         """Create optimizer with learning rate schedule"""
@@ -276,12 +254,11 @@ class Trainer:
         if len(predicted_values.shape) > 1:
             predicted_values = predicted_values.squeeze(-1)
         
-        # Compute losses using PolicyGradientLoss
-        total_loss, (policy_loss, value_loss, entropy_loss) = PolicyGradientLoss.compute_losses_from_model_outputs(
+        # Compute losses using AlphaZero-style loss (no advantages)
+        total_loss, (policy_loss, value_loss, entropy_loss) = PolicyGradientLoss.compute_alphazero_losses(
             policy_logits=policy_logits,
             values=predicted_values,
-            action_onehot=batch_action_probs,
-            advantages=jnp.zeros_like(batch_values),  # We don't use advantages in this setup
+            action_probs=batch_action_probs,
             target_values=batch_values,
             entropy_coeff=self.config.entropy_coef
         )
@@ -358,11 +335,11 @@ class Trainer:
             **kwargs: Arguments for the data source
         """
         if source_type == 'game_records':
-            source = create_game_record_data_source(self.model, self.train_state.params)
+            source = create_game_record_data_source(self.actor_critic)
             self.data_manager.add_data_source(source)
         elif source_type == 'ai_opponent':
             opponent_path = kwargs.get('opponent_engine_path', '')
-            source = create_ai_opponent_data_source(self.model, self.train_state.params, opponent_path)
+            source = create_ai_opponent_data_source(self.actor_critic, opponent_path)
             self.data_manager.add_data_source(source)
         else:
             raise ValueError(f"Unknown data source type: {source_type}")
@@ -386,43 +363,31 @@ class Trainer:
         )
     
     def train_on_batch(self, examples: List[TrainingExample]) -> Dict[str, float]:
-        """
-        Train on a batch of examples
-        
-        Args:
-            examples: List of training examples
-            
-        Returns:
-            Dictionary of loss components
-        """
-        if len(examples) == 0:
-            return {'policy_loss': 0.0, 'value_loss': 0.0, 'entropy_loss': 0.0, 'total_loss': 0.0}
-        
-        # Convert examples to batched arrays
-        batch_board_states = jnp.stack([ex.board_state for ex in examples])
-        batch_feature_vectors = jnp.stack([ex.feature_vector for ex in examples])
-        batch_action_probs = jnp.stack([ex.action_probs for ex in examples])
-        batch_values = jnp.array([ex.value for ex in examples])
-        
-        # Perform training step
-        self.train_state, (total_loss, (policy_loss, value_loss, entropy_loss)) = self._train_step(
-            self.train_state,
-            batch_board_states,
-            batch_feature_vectors,
-            batch_action_probs,
-            batch_values
+        """Trains the model on a single batch of examples."""
+        if not examples:
+            return {k: 0.0 for k in ['policy_loss', 'value_loss', 'entropy_loss', 'total_loss']}
+
+        # Convert list of examples to batched JAX arrays
+        board_states = jnp.stack([ex.board_state for ex in examples])
+        feature_vectors = jnp.stack([ex.feature_vector for ex in examples])
+        target_policies = jnp.stack([ex.action_probs for ex in examples])
+        target_values = jnp.array([ex.value for ex in examples])
+
+        # Perform a training step
+        self.train_state, (loss, loss_components) = self._train_step(
+            self.train_state, board_states, feature_vectors, target_policies, target_values
         )
-        
-        # Update actor-critic with new parameters
+
+        # CRITICAL: Update the ActorCritic with the new parameters.
+        # This is the single point of update.
         self.actor_critic.update_params(self.train_state.params)
-        self.mcts.params = self.train_state.params
-        self.self_play.update_model_params(self.train_state.params)
-        
+
+        policy_loss, value_loss, entropy_loss = loss_components
         return {
             'policy_loss': float(policy_loss),
             'value_loss': float(value_loss),
             'entropy_loss': float(entropy_loss),
-            'total_loss': float(total_loss)
+            'total_loss': float(loss)
         }
     
     def train_iteration(self, iteration: int) -> Dict[str, Any]:
@@ -499,35 +464,6 @@ class Trainer:
         # Clean up old checkpoints
         self.checkpoint_manager.delete_old_checkpoints(keep_n=5)
     
-    def load_checkpoint(self, checkpoint_path: Optional[str] = None):
-        """
-        Load training checkpoint using CheckpointManager
-        
-        Args:
-            checkpoint_path: Path to specific checkpoint (None for latest)
-        """
-        params, optimizer_state, metadata = self.checkpoint_manager.load_checkpoint(
-            checkpoint_path, load_optimizer_state=True
-        )
-        
-        # Update train state
-        self.train_state = TrainState(
-            params=params,
-            optimizer_state=optimizer_state
-        )
-        
-        # Restore training stats if available
-        if 'training_stats' in metadata:
-            self.training_stats = metadata['training_stats']
-        
-        # Update models with loaded parameters
-        self.actor_critic.update_params(params)
-        self.mcts.params = params
-        self.self_play.update_model_params(params)
-        
-        step = metadata.get('step', 0)
-        logger.info(f"Checkpoint loaded from step {step}")
-        return step
     
     def train(self, num_iterations: Optional[int] = None):
         """
@@ -565,14 +501,34 @@ class Trainer:
 # Convenience functions
 def create_trainer(config: Optional[TrainingConfig] = None, 
                   checkpoint_dir: str = "data/checkpoints",
-                  resume_from_checkpoint: Optional[str] = None) -> Trainer:
-    """Create trainer with default configuration"""
-    return Trainer(config=config, checkpoint_dir=checkpoint_dir, resume_from_checkpoint=resume_from_checkpoint)
+                  resume_from: Optional[str] = None) -> Trainer:
+    """
+    Create trainer with default configuration using factory method
+    
+    Args:
+        config: Training configuration
+        checkpoint_dir: Directory for checkpoints  
+        resume_from: Specific checkpoint path to resume from
+        
+    Returns:
+        Initialized Trainer instance
+    """
+    return Trainer.create(config=config, checkpoint_dir=checkpoint_dir, resume_from=resume_from)
 
 def train_model(num_iterations: int = 100, 
                checkpoint_dir: str = "data/checkpoints",
-               resume_from_checkpoint: Optional[str] = None) -> Trainer:
-    """Train model with default configuration"""
-    trainer = create_trainer(checkpoint_dir=checkpoint_dir, resume_from_checkpoint=resume_from_checkpoint)
+               resume_from: Optional[str] = None) -> Trainer:
+    """
+    Train model with default configuration
+    
+    Args:
+        num_iterations: Number of training iterations
+        checkpoint_dir: Directory for checkpoints
+        resume_from: Specific checkpoint path to resume from
+        
+    Returns:
+        Trained Trainer instance
+    """
+    trainer = create_trainer(checkpoint_dir=checkpoint_dir, resume_from=resume_from)
     trainer.train(num_iterations)
     return trainer
