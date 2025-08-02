@@ -4,6 +4,7 @@ __pycache__/
 .idea/
 .claude
 CLAUDE.md
+GEMINI.md
 .venv/
 .vscode/
 
