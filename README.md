@@ -4,6 +4,33 @@ SwinShogi is a Japanese chess (shogi) AI system using Swin Transformer architect
 
 SwinShogiは、Swin Transformerを使用した将棋AIシステムです。強化学習と深層学習を組み合わせ、高性能な将棋エンジンを目指しています。
 
+このプロジェクトは依存関係管理とビルドプロセスに**Poetry**を使用しています。
+
+## セットアップとビルド
+
+### 1. Poetryのインストール
+```bash
+curl -sSL https://install.python-poetry.org | python3 -
+```
+
+### 2. プロジェクトのセットアップ
+```bash
+# 依存関係のインストール
+poetry install
+
+# 仮想環境の有効化
+poetry shell
+```
+
+### 3. 実行
+```bash
+# テストの実行
+poetry run python -m pytest
+
+# トレーニングの実行
+poetry run python src/rl/trainer.py
+```
+
 ## 主な特徴
 
 - **Swin Transformer**による深層学習モデル
