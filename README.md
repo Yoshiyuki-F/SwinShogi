@@ -1,5 +1,7 @@
 # SwinShogi
 
+SwinShogi is a Japanese chess (shogi) AI system using Swin Transformer architecture. It combines reinforcement learning and deep learning to create a high-performance shogi engine.
+
 SwinShogiは、Swin Transformerを使用した将棋AIシステムです。強化学習と深層学習を組み合わせ、高性能な将棋エンジンを目指しています。
 
 ## 主な特徴

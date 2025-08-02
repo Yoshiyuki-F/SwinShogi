@@ -3,6 +3,9 @@ __pycache__/
 *$py.class
 .idea/
 .claude
+CLAUDE.md
+.venv/
+.vscode/
 
 # Large data files and checkpoints
 data/checkpoints/*.pkl
